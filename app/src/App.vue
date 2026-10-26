@@ -6,7 +6,7 @@ import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
 import { MODELS, mockScans } from "./mock";
 
-const WELCOME_KEY = "oxcut.welcomeSeen";
+const WELCOME_KEY = "oxicut.welcomeSeen";
 
 function welcomeSeen(): boolean {
   try {
@@ -67,7 +67,7 @@ function downloadAllFromWelcome() {
 <template>
   <div class="app">
     <header class="top">
-      <div class="brand">Ox<span>Cut</span></div>
+      <div class="brand">Oxi<span>Cut</span></div>
       <span class="chip" :class="modelsReady ? 'ok' : 'warn'">
         {{ modelsReady ? "Models ready" : "Fast mode (models not downloaded)" }}
       </span>

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    oxcut_app_lib::run()
+    oxicut_app_lib::run()
 }

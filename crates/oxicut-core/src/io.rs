@@ -36,7 +36,7 @@ mod tests {
     use image::{ImageBuffer, Rgb};
 
     fn temp_path(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("oxcut-io-{}-{name}", std::process::id()))
+        std::env::temp_dir().join(format!("oxicut-io-{}-{name}", std::process::id()))
     }
 
     #[test]

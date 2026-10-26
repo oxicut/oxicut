@@ -1,8 +1,8 @@
-//! Model registry and checksum-verified downloads for OxCut.
+//! Model registry and checksum-verified downloads for OxiCut.
 //!
 //! Nothing here is bundled: models are fetched on first use, hashed, and stored
 //! in one directory shared by the command line and the desktop app
-//! (`%APPDATA%\oxcut\models` on Windows). A file whose SHA-256 does not match
+//! (`%APPDATA%\oxicut\models` on Windows). A file whose SHA-256 does not match
 //! the registry is never returned; it is deleted and fetched again.
 //!
 //! URLs, revision and hashes are copied from ScanSplitter's `models.py`.
@@ -107,14 +107,14 @@ fn io_error(path: &Path) -> impl FnOnce(std::io::Error) -> ModelError + '_ {
     }
 }
 
-/// Where models live: `OXCUT_MODELS_DIR` if set, else `<user data>/oxcut/models`
-/// (`%APPDATA%\oxcut\models` on Windows).
+/// Where models live: `OXICUT_MODELS_DIR` if set, else `<user data>/oxicut/models`
+/// (`%APPDATA%\oxicut\models` on Windows).
 pub fn models_dir() -> Result<PathBuf, ModelError> {
-    if let Some(dir) = std::env::var_os("OXCUT_MODELS_DIR") {
+    if let Some(dir) = std::env::var_os("OXICUT_MODELS_DIR") {
         return Ok(PathBuf::from(dir));
     }
     let base = directories::BaseDirs::new().ok_or(ModelError::NoDataDirectory)?;
-    Ok(base.data_dir().join("oxcut").join("models"))
+    Ok(base.data_dir().join("oxicut").join("models"))
 }
 
 pub fn model_path(dir: &Path, spec: &ModelSpec) -> PathBuf {
@@ -339,7 +339,7 @@ mod tests {
     }
 
     fn scratch(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("oxcut-models-{}-{name}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("oxicut-models-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         dir
     }
@@ -494,12 +494,12 @@ mod tests {
     #[test]
     fn models_dir_honours_the_override_and_defaults_under_user_data() {
         // SAFETY of env mutation: only this test touches the variable.
-        unsafe { std::env::set_var("OXCUT_MODELS_DIR", "somewhere/else") };
+        unsafe { std::env::set_var("OXICUT_MODELS_DIR", "somewhere/else") };
         assert_eq!(models_dir().unwrap(), PathBuf::from("somewhere/else"));
-        unsafe { std::env::remove_var("OXCUT_MODELS_DIR") };
+        unsafe { std::env::remove_var("OXICUT_MODELS_DIR") };
         let default = models_dir().unwrap();
         assert!(
-            default.ends_with("oxcut/models") || default.ends_with("oxcut\\models"),
+            default.ends_with("oxicut/models") || default.ends_with("oxicut\\models"),
             "{default:?}"
         );
     }

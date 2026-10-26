@@ -1,4 +1,4 @@
-# Oxcut — project brief for Claude Code (Windows)
+# OxiCut — project brief for Claude Code (Windows)
 
 A native, cross-platform (Windows first) desktop app that takes a batch of flatbed scans
 (JPEG, PNG, TIFF incl. 16-bit) containing one or more photo prints / postcards, detects each
@@ -12,8 +12,8 @@ ScanSplitter's React + Fabric.js editor.
 **License:** this is a derivative of ScanSplitter, so the project is **GPL-3.0**. Add a LICENSE
 file on day one and keep attribution in README.
 
-**Name:** Oxcut. Crates `oxcut-core`, `oxcut-models`, `oxcut-cli`; CLI binary `oxcut`;
-Tauri identifier `app.oxcut`; app data directory `%APPDATA%\oxcut\` (Tauri `app_data_dir()`).
+**Name:** OxiCut. Crates `oxicut-core`, `oxicut-models`, `oxicut-cli`; CLI binary `oxicut`;
+Tauri identifier `app.oxicut`; app data directory `%APPDATA%\oxicut\` (Tauri `app_data_dir()`).
 
 ---
 
@@ -62,7 +62,7 @@ Optional but recommended: `cargo install cargo-nextest` (faster tests), `cargo i
 ## 2. Repository layout
 
 ```
-oxcut/
+oxicut/
 ├── Cargo.toml                 # workspace
 ├── LICENSE                    # GPL-3.0
 ├── README.md
@@ -71,9 +71,9 @@ oxcut/
 │   ├── detector-v7-port.md    # our notes on the port, deviations from the Python
 │   └── ...
 ├── crates/
-│   ├── oxcut-core/            # detection, deskew, crop, export — no I/O policy, no UI
-│   ├── oxcut-models/          # model registry, download/verify, MobileSAM (+ later orientation) via `ort`
-│   └── oxcut-cli/             # `oxcut detect|crop|bench|models ...`
+│   ├── oxicut-core/            # detection, deskew, crop, export — no I/O policy, no UI
+│   ├── oxicut-models/          # model registry, download/verify, MobileSAM (+ later orientation) via `ort`
+│   └── oxicut-cli/             # `oxicut detect|crop|bench|models ...`
 ├── app/                       # Tauri 2 app
 │   ├── src-tauri/             # Rust side: commands, project store, job runner
 │   └── src/                   # Vue 3 + TypeScript + Fabric.js
@@ -94,7 +94,7 @@ Suggested crates:
 
 ## 3. Models: download on first use (not bundled)
 
-`oxcut-models` owns a small **model registry** and nothing else knows URLs:
+`oxicut-models` owns a small **model registry** and nothing else knows URLs:
 
 ```rust
 pub struct ModelSpec { id: &'static str, filename: &'static str, url: &'static str,
@@ -105,12 +105,12 @@ pub struct ModelSpec { id: &'static str, filename: &'static str, url: &'static s
   **Acly/MobileSAM** on Hugging Face that ScanSplitter uses; ~43 MB total), and later the
   orientation model (~80 MB). **Copy the exact URLs and SHA-256 values from ScanSplitter's model
   download code** rather than guessing.
-- Storage: `<app_data_dir>/models/<filename>` (Windows: `%APPDATA%\oxcut\models\`). The CLI uses
-  the same directory via `directories::ProjectDirs::from("app", "oxcut", "oxcut")`.
+- Storage: `<app_data_dir>/models/<filename>` (Windows: `%APPDATA%\oxicut\models\`). The CLI uses
+  the same directory via `directories::ProjectDirs::from("app", "oxicut", "oxicut")`.
 - `ensure_model(id, progress: impl FnMut(Progress))`: if the file exists and its SHA-256
   matches, return the path; otherwise download to `<filename>.part` with streaming progress,
   verify SHA-256, atomically rename. Never load a model whose checksum fails; delete and re-download.
-- `oxcut models status|download|verify|path` for the CLI.
+- `oxicut models status|download|verify|path` for the CLI.
 - In the app, a **Model manager** panel shows status, size, download progress and errors, and
   triggers download on first run or on first use of a mode that needs it. Detection modes that need
   a missing model are shown as "download required" and the UI falls back to **v3** until they exist.
@@ -123,7 +123,7 @@ pub struct ModelSpec { id: &'static str, filename: &'static str, url: &'static s
 ## 4. Phase plan
 
 ### Phase 1 — Workspace + v3 port + CLI
-Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotated rects:
+Goal: `oxicut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotated rects:
 cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
 
 - Port **v3** (model-free, background-aware): model platen/paper colour in Lab from the scan
@@ -133,10 +133,10 @@ cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
 - Downsample for detection (~1500 px long side, confirm against the Python), map boxes back to
   full resolution.
 - Crop: rotate full-res around the box centre, axis-aligned crop, optional inset px. Preserve
-  bit depth. `oxcut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`.
+  bit depth. `oxicut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`.
 
 ### Phase 2 — Model registry, MobileSAM via `ort`, then v5, then v7
-- Implement `oxcut-models` as in §3 (registry, download, verify, CLI subcommands).
+- Implement `oxicut-models` as in §3 (registry, download, verify, CLI subcommands).
 - MobileSAM inference: same preprocessing (resize/pad to 1024, normalisation) and point/box
   prompting the Python uses; cache the image embedding per scan so repeated prompts are cheap.
 - Port **v5**: v3/MobileSAM anchors, colour-independent texture pass, closed-frame pass for pale
@@ -147,7 +147,7 @@ cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
   tightening onto the inner photographic edge** (excludes white/scalloped borders). This is the
   default mode.
 - **Benchmark**: port `benchmarks/evaluate.py` semantics (rotated-box matching via Hungarian
-  assignment, box quality, F1@0.50, F1@0.85, count accuracy) as `oxcut bench`. Use the
+  assignment, box quality, F1@0.50, F1@0.85, count accuracy) as `oxicut bench`. Use the
   repo's synthetic `benchmarks/robustness/` fixtures plus the user's real scans (kept outside
   the repo). Target: within a few points of the Python v7 on the same inputs. Run the Python
   side via `uv run scansplitter process` for A/B.
@@ -179,7 +179,7 @@ cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
 - Export: approved only; format per settings; optional JSON/CSV manifest.
 
 ### Phase 6 — Later
-- Orientation model (0/90/180/270) via `ort`, registered in `oxcut-models` like MobileSAM.
+- Orientation model (0/90/180/270) via `ort`, registered in `oxicut-models` like MobileSAM.
 - macOS/Linux builds, code signing, auto-update.
 - Album Splitter mode.
 
@@ -202,8 +202,8 @@ cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
 
 - Phase 1: v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy`
   clean; unit tests for Lab background model, gutter split, edge snap.
-- Phase 2: `oxcut bench` reports v7 box quality within ~3 points of the Python v7 on the
-  same fixtures; on a clean machine `oxcut models download` fetches, verifies and loads both
+- Phase 2: `oxicut bench` reports v7 box quality within ~3 points of the Python v7 on the
+  same fixtures; on a clean machine `oxicut models download` fetches, verifies and loads both
   MobileSAM files, and a corrupted file is detected and re-fetched.
 - Phase 3: batch of 50 scans processes without blocking the UI; outputs open correctly in
   Windows Photos and IrfanView; 16-bit TIFF stays 16-bit when "same format"; first run without
@@ -216,9 +216,9 @@ cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
 ## 7. First commands for Claude Code
 
 ```
-cargo new --lib crates/oxcut-core
-cargo new --lib crates/oxcut-models
-cargo new crates/oxcut-cli
+cargo new --lib crates/oxicut-core
+cargo new --lib crates/oxicut-models
+cargo new crates/oxicut-cli
 # write workspace Cargo.toml, LICENSE (GPL-3.0), .gitignore (target/, reference/, app/node_modules/)
 # read reference/ScanSplitter/docs/specs/detector-v7.md and the detector_v3/v5/v7 sources
 # start Phase 1

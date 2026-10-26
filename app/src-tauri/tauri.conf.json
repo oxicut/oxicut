@@ -1,9 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "OxCut",
-  "mainBinaryName": "oxcut-app",
+  "productName": "OxiCut",
+  "mainBinaryName": "oxicut-app",
   "version": "0.1.0",
-  "identifier": "app.oxcut",
+  "identifier": "app.oxicut",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
   "app": {
     "windows": [
       {
-        "title": "OxCut",
+        "title": "OxiCut",
         "width": 1360,
         "height": 860,
         "minWidth": 960,

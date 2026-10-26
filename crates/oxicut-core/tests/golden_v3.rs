@@ -7,20 +7,22 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use oxcut_core::background::background_colors;
-use oxcut_core::candidates::candidate_rects;
-use oxcut_core::color::{rgb_to_gray, rgb_to_lab};
-use oxcut_core::contours::{contour_info, find_external_contours};
-use oxcut_core::detect::{DetectOptions, detect_v3};
-use oxcut_core::foreground::foreground;
-use oxcut_core::geometry::RotatedRect;
-use oxcut_core::io::{load_image, to_detection_rgb};
-use oxcut_core::mask::{Element, close, close_size, density_mask, density_window, open, open_size};
-use oxcut_core::merge::{deduplicate, merge_fragments};
-use oxcut_core::refine::refine_rect_to_edges;
-use oxcut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
-use oxcut_core::snap::snap_angle_to_long_edges;
-use oxcut_core::split::split_on_gutter;
+use oxicut_core::background::background_colors;
+use oxicut_core::candidates::candidate_rects;
+use oxicut_core::color::{rgb_to_gray, rgb_to_lab};
+use oxicut_core::contours::{contour_info, find_external_contours};
+use oxicut_core::detect::{DetectOptions, detect_v3};
+use oxicut_core::foreground::foreground;
+use oxicut_core::geometry::RotatedRect;
+use oxicut_core::io::{load_image, to_detection_rgb};
+use oxicut_core::mask::{
+    Element, close, close_size, density_mask, density_window, open, open_size,
+};
+use oxicut_core::merge::{deduplicate, merge_fragments};
+use oxicut_core::refine::refine_rect_to_edges;
+use oxicut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
+use oxicut_core::snap::snap_angle_to_long_edges;
+use oxicut_core::split::split_on_gutter;
 use serde::Deserialize;
 
 #[derive(Deserialize)]

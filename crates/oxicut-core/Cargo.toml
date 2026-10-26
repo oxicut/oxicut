@@ -1,5 +1,5 @@
 [package]
-name = "oxcut-core"
+name = "oxicut-core"
 description = "Scan splitting engine: detection, deskew, crop, export"
 version.workspace = true
 edition.workspace = true

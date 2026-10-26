@@ -26,7 +26,7 @@ const settings = reactive({
   outputDir: "",
 });
 
-// Mock download progress, 0..1 per model id. Real progress comes from oxcut-models in Phase 3.
+// Mock download progress, 0..1 per model id. Real progress comes from oxicut-models in Phase 3.
 const progress = reactive<Record<string, number>>({});
 const timers = new Map<string, number>();
 
@@ -70,7 +70,7 @@ const needsModels = () => settings.mode !== "v3" && MODELS.some((m) => !props.in
         </select>
       </label>
       <p v-if="needsModels()" class="callout">
-        This mode needs the MobileSAM models. Until they are downloaded, OxCut falls back to v3.
+        This mode needs the MobileSAM models. Until they are downloaded, OxiCut falls back to v3.
         <button class="link" @click="tab = 'models'">Open model manager</button>
       </p>
 
@@ -131,7 +131,7 @@ const needsModels = () => settings.mode !== "v3" && MODELS.some((m) => !props.in
 
     <div v-else class="body">
       <p class="muted lead">
-        Models are downloaded once, checksum-verified, and stored in <code>%APPDATA%\oxcut\models</code>. Nothing is
+        Models are downloaded once, checksum-verified, and stored in <code>%APPDATA%\oxicut\models</code>. Nothing is
         bundled with the installer.
       </p>
 

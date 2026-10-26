@@ -8,9 +8,9 @@ const totalMb = MODELS.reduce((sum, m) => sum + m.sizeMb, 0);
 <template>
   <div class="backdrop">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <h1 id="welcome-title">Welcome to Ox<span>Cut</span></h1>
+      <h1 id="welcome-title">Welcome to Oxi<span>Cut</span></h1>
       <p>
-        OxCut splits scanned prints and postcards into separate, straightened images. Add a batch of scans, let it find
+        OxiCut splits scanned prints and postcards into separate, straightened images. Add a batch of scans, let it find
         each item, and fix any box that looks off.
       </p>
       <p>

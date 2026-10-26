@@ -1,4 +1,4 @@
-//! `oxcut`: detect and crop prints from flatbed scans.
+//! `oxicut`: detect and crop prints from flatbed scans.
 
 mod boxes;
 mod output;
@@ -8,16 +8,16 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use oxcut_core::crop::crop_region;
-use oxcut_core::detect::{DetectOptions, detect_v3};
-use oxcut_core::io::{load_image, to_detection_rgb};
+use oxicut_core::crop::crop_region;
+use oxicut_core::detect::{DetectOptions, detect_v3};
+use oxicut_core::io::{load_image, to_detection_rgb};
 
 use boxes::{BoxRegion, BoxesFile};
 use output::Format;
 
 #[derive(Parser)]
 #[command(
-    name = "oxcut",
+    name = "oxicut",
     version,
     about = "Split flatbed scans into separate, straightened prints"
 )]
@@ -71,7 +71,7 @@ struct DetectArgs {
 struct CropArgs {
     /// The scan the boxes were detected in.
     input: PathBuf,
-    /// Boxes file written by `oxcut detect`.
+    /// Boxes file written by `oxicut detect`.
     #[arg(long)]
     boxes: PathBuf,
     /// Directory for the cropped images (created if missing).
@@ -136,6 +136,10 @@ fn detect(args: DetectArgs) -> Result<()> {
     let json = serde_json::to_string_pretty(&file)?;
 
     if let Some(path) = &args.output {
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
+        }
         std::fs::write(path, &json).with_context(|| format!("writing {}", path.display()))?;
     } else if args.debug.is_none() {
         println!("{json}");
@@ -168,7 +172,7 @@ fn crop(args: CropArgs) -> Result<()> {
     )
     .with_context(|| {
         format!(
-            "{} is not a boxes file from `oxcut detect`",
+            "{} is not a boxes file from `oxicut detect`",
             args.boxes.display()
         )
     })?;
@@ -196,7 +200,7 @@ fn crop(args: CropArgs) -> Result<()> {
     let mut written = 0;
     for (index, region) in file.regions.iter().enumerate() {
         let rect =
-            oxcut_core::RotatedRect::new(region.cx, region.cy, region.w, region.h, region.angle);
+            oxicut_core::RotatedRect::new(region.cx, region.cy, region.w, region.h, region.angle);
         let Some(crop) = crop_region(&image, &rect) else {
             eprintln!("skipping box {}: empty after clipping", index + 1);
             continue;

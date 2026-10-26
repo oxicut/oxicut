@@ -1,16 +1,16 @@
-//! End-to-end checks of the `oxcut` binary on a generated scan.
+//! End-to-end checks of the `oxicut` binary on a generated scan.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use image::{Rgb, RgbImage};
 
-fn oxcut() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_oxcut"))
+fn oxicut() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_oxicut"))
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("oxcut-cli-{}-{name}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("oxicut-cli-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -46,7 +46,7 @@ fn detect_prints_boxes_json_to_stdout() {
     let scan = dir.join("scan.png");
     write_scan(&scan);
 
-    let result = oxcut()
+    let result = oxicut()
         .args(["detect"])
         .arg(&scan)
         .args(["--inset", "0"])
@@ -73,7 +73,7 @@ fn debug_flag_writes_the_overlays_and_stage_data() {
     write_scan(&scan);
     let debug = dir.join("debug");
 
-    let result = oxcut()
+    let result = oxicut()
         .arg("detect")
         .arg(&scan)
         .arg("--debug")
@@ -108,7 +108,7 @@ fn crop_writes_one_straightened_image_per_box_and_leaves_the_scan_alone() {
     let boxes = dir.join("boxes.json");
 
     assert!(
-        oxcut()
+        oxicut()
             .arg("detect")
             .arg(&scan)
             .args(["--inset", "0", "-o"])
@@ -118,7 +118,7 @@ fn crop_writes_one_straightened_image_per_box_and_leaves_the_scan_alone() {
             .success()
     );
     let out = dir.join("crops");
-    let result = oxcut()
+    let result = oxicut()
         .arg("crop")
         .arg(&scan)
         .arg("--boxes")
@@ -160,7 +160,7 @@ fn crop_refuses_boxes_from_a_different_sized_scan() {
     write_scan(&scan);
     let boxes = dir.join("boxes.json");
     assert!(
-        oxcut()
+        oxicut()
             .arg("detect")
             .arg(&scan)
             .arg("-o")
@@ -174,7 +174,7 @@ fn crop_refuses_boxes_from_a_different_sized_scan() {
     RgbImage::from_pixel(500, 500, Rgb([255, 255, 255]))
         .save(&other)
         .unwrap();
-    let result = oxcut()
+    let result = oxicut()
         .arg("crop")
         .arg(&other)
         .arg("--boxes")
@@ -194,7 +194,7 @@ fn jpeg_and_tiff_output_formats_work() {
     write_scan(&scan);
     let boxes = dir.join("boxes.json");
     assert!(
-        oxcut()
+        oxicut()
             .arg("detect")
             .arg(&scan)
             .args(["--inset", "0", "-o"])
@@ -206,7 +206,7 @@ fn jpeg_and_tiff_output_formats_work() {
 
     for (format, extension) in [("jpg", "jpg"), ("tiff", "tif"), ("png", "png")] {
         let out = dir.join(format!("out-{format}"));
-        let status = oxcut()
+        let status = oxicut()
             .arg("crop")
             .arg(&scan)
             .arg("--boxes")
@@ -225,14 +225,31 @@ fn jpeg_and_tiff_output_formats_work() {
 }
 
 #[test]
+fn output_folders_are_created_when_missing() {
+    let dir = scratch("mkdir");
+    let scan = dir.join("scan.png");
+    write_scan(&scan);
+    let boxes = dir.join("not").join("yet").join("there").join("boxes.json");
+    let status = oxicut()
+        .arg("detect")
+        .arg(&scan)
+        .arg("-o")
+        .arg(&boxes)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert!(boxes.is_file());
+}
+
+#[test]
 fn bad_arguments_fail_with_a_message() {
-    let result = oxcut()
+    let result = oxicut()
         .args(["detect", "no-such-file.png"])
         .output()
         .unwrap();
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("reading no-such-file.png"));
-    let result = oxcut()
+    let result = oxicut()
         .args(["detect", "x.png", "--min-area", "150"])
         .output()
         .unwrap();

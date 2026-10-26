@@ -1,6 +1,6 @@
 [package]
-name = "oxcut-models"
-description = "Model registry, download/verify, and ONNX inference for Oxcut"
+name = "oxicut-models"
+description = "Model registry, download/verify, and ONNX inference for OxiCut"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

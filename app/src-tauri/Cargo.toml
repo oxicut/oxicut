@@ -1,6 +1,6 @@
 [package]
-name = "oxcut-app"
-description = "Oxcut desktop app (Tauri 2)"
+name = "oxicut-app"
+description = "OxiCut desktop app (Tauri 2)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ authors.workspace = true
 [lib]
 # The `_lib` suffix is needed to keep the lib name unique from the bin name on Windows.
 # See https://github.com/rust-lang/cargo/issues/8519
-name = "oxcut_app_lib"
+name = "oxicut_app_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

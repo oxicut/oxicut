@@ -4,9 +4,9 @@ use std::path::Path;
 
 use anyhow::Result;
 use image::{GrayImage, Rgb, RgbImage};
-use oxcut_core::RotatedRect;
-use oxcut_core::detect::Detection;
-use oxcut_core::resize::resize_area;
+use oxicut_core::RotatedRect;
+use oxicut_core::detect::Detection;
+use oxicut_core::resize::resize_area;
 
 const GREEN: Rgb<u8> = Rgb([40, 220, 60]);
 const YELLOW: Rgb<u8> = Rgb([255, 210, 0]);

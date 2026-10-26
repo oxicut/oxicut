@@ -4,7 +4,7 @@ Notes on porting ScanSplitter's v3, v5 and v7 detectors to Rust. Record every de
 
 Reference: `reference/ScanSplitter` (scansplitter 0.8.0).
 
-## Corrections to OXCUT_PLAN.md (found reading scansplitter 0.8.0)
+## Corrections to OXICUT_PLAN.md (found reading scansplitter 0.8.0)
 
 - There is no `detector_v3.py` / `detector_v5.py`. v3, v4 and v5 all live in `src/scansplitter/detector.py`; v7 is `detector_v7.py`. Dispatch is in `detection.py`.
 - v3 detection resolution is **1800 px** long side (`detection_max_dimension=1800`), not ~1500.

@@ -1,20 +1,20 @@
 [package]
-name = "oxcut-cli"
-description = "Command-line interface for Oxcut"
+name = "oxicut-cli"
+description = "Command-line interface for OxiCut"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "oxcut"
+name = "oxicut"
 path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff"] }
-oxcut-core.workspace = true
-oxcut-models.workspace = true
+oxicut-core.workspace = true
+oxicut-models.workspace = true
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

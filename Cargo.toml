@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/oxcut-core",
-    "crates/oxcut-models",
-    "crates/oxcut-cli",
+    "crates/oxicut-core",
+    "crates/oxicut-models",
+    "crates/oxicut-cli",
     "app/src-tauri",
 ]
 
@@ -11,7 +11,7 @@ members = [
 [profile.dev.package."*"]
 opt-level = 3
 
-[profile.dev.package.oxcut-core]
+[profile.dev.package.oxicut-core]
 opt-level = 3
 
 [workspace.package]
@@ -21,5 +21,5 @@ license = "GPL-3.0-or-later"
 authors = ["Janos Rusiczki <janos.rusiczki@gmail.com>"]
 
 [workspace.dependencies]
-oxcut-core = { path = "crates/oxcut-core" }
-oxcut-models = { path = "crates/oxcut-models" }
+oxicut-core = { path = "crates/oxicut-core" }
+oxicut-models = { path = "crates/oxicut-models" }

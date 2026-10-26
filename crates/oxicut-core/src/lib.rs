@@ -1,4 +1,4 @@
-//! Oxcut engine: detection, deskew, crop and export of photos on flatbed scans.
+//! OxiCut engine: detection, deskew, crop and export of photos on flatbed scans.
 //!
 //! Detection is a port of ScanSplitter (GPL-3.0). See `docs/detector-v7-port.md`.
 
