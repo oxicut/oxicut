@@ -7,3 +7,7 @@ license.workspace = true
 authors.workspace = true
 
 [dependencies]
+directories = "6.0.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "native-tls"] }
+sha2 = "0.11.1"
+thiserror = "2.0.21"

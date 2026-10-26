@@ -71,9 +71,9 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 
 ## Phase 2: Model registry, MobileSAM via `ort`, v5, v7, benchmark
 
-- [ ] `oxcut-models` **registry** (`ModelSpec { id, filename, url, sha256, size_bytes }`). Copy the exact Acly/MobileSAM URLs and SHA-256 values from ScanSplitter's download code; don't guess.
-- [ ] Storage in `%APPDATA%\oxcut\models\` via `directories::ProjectDirs::from("app", "oxcut", "oxcut")`.
-- [ ] `ensure_model(id, progress)`: verify existing file, else stream to `.part`, verify SHA-256, atomic rename. Never load a file that fails the checksum.
+- [x] `oxcut-models` **registry** (`ModelSpec { id, label, filename, urls, sha256, approx_bytes }`). URLs, pinned Hugging Face revision and SHA-256 values copied from ScanSplitter's `models.py`; includes the orientation model for later. _(Exact sizes still to fill in after the first real download.)_
+- [x] Storage in `%APPDATA%\oxcut\models\` (`directories::BaseDirs` data dir + `oxcut/models`, override with `OXCUT_MODELS_DIR`). Shared by the CLI and the app; deliberately not Tauri's `app_data_dir`, which would be a different folder.
+- [x] `ensure_model(dir, spec, progress)`: verify existing file, else stream to `.part`, verify SHA-256, atomic rename; tries mirrors in order; a corrupt file is deleted and re-fetched. Never returns a file that fails the checksum. _(8 tests against a local fake HTTP server. HTTPS via `reqwest` + `native-tls` = Windows Schannel, so no C/C++ build.)_
 - [ ] CLI: `oxcut models status|download|verify|path`.
 - [ ] Offline / failed download degrades to v3 with a clear message, never crashes.
 - [ ] **MobileSAM inference** via `ort` 2.x: same preprocessing (resize/pad to 1024, normalisation) and point/box prompting as the Python; cache the image embedding per scan.
