@@ -90,7 +90,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [ ] Port **v5**: v3/MobileSAM anchors, colour-independent texture pass, closed-frame pass for pale photos, texture-island splitting, tightly prompted segmentation near scan edges, fallback to the conservative anchor on conflict.
 - [ ] Port **v7** (default mode): v5 anchors; v3/chroma alternative proposals scored by boundary brightness step; relative rejection of prints seen through glassine sleeves; per-side tightening onto the inner photographic edge.
 - [ ] Expose `DetectionMode { V3, V5, V7 }` with `requires_models()`.
-- [ ] `oxicut bench`: port `benchmarks/evaluate.py` semantics (rotated-box Hungarian matching, box quality, F1@0.50, F1@0.85, count accuracy) on `benchmarks/robustness/` fixtures plus real scans kept outside the repo. A/B against `uv run scansplitter process`.
+- [x] `oxicut bench` (scoring and CLI done, reproduces ScanSplitter's v3 numbers, see port notes): port `benchmarks/evaluate.py` semantics (rotated-box Hungarian matching, box quality, F1@0.50, F1@0.85, count accuracy) on `benchmarks/robustness/` fixtures plus real scans kept outside the repo. A/B against `uv run scansplitter process`.
 - [ ] Check the white-lid acceptance cases (see below) on real scans.
 - [ ] **Done when:** `oxicut bench` v7 box quality within ~3 points of Python v7 on the same fixtures; on a clean machine `oxicut models download` fetches, verifies and loads both MobileSAM files; a corrupted file is detected and re-fetched.
 - [ ] Commit + `docs/PROGRESS.md` entry.

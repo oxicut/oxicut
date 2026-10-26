@@ -1,5 +1,6 @@
 //! `oxicut`: detect and crop prints from flatbed scans.
 
+mod bench;
 mod boxes;
 mod overlay;
 
@@ -31,9 +32,11 @@ enum Command {
     Detect(DetectArgs),
     /// Cut the boxes from a `detect` run out of the scan as separate images.
     Crop(CropArgs),
+    /// Score a detector against ground-truth boxes (ScanSplitter's metrics).
+    Bench(BenchCli),
 }
 
-#[derive(Clone, Copy, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 enum Mode {
     /// Model-free, background-aware detector (a port of ScanSplitter v3).
     V3,
@@ -68,6 +71,30 @@ struct DetectArgs {
 }
 
 #[derive(Args)]
+struct BenchCli {
+    /// Benchmark manifest. Images are found relative to its folder.
+    #[arg(
+        long,
+        default_value = "reference/ScanSplitter/benchmarks/manifest.json"
+    )]
+    manifest: PathBuf,
+    /// Suite to run (repeat for several); default: every suite except `album`.
+    #[arg(long = "suite")]
+    suites: Vec<String>,
+    #[arg(long, value_enum, default_value = "v3")]
+    mode: Mode,
+    /// Pixels trimmed from every side. ScanSplitter's own benchmark uses its default, 10.
+    #[arg(long, default_value_t = 0)]
+    inset: i32,
+    /// Print one line per scan as well.
+    #[arg(long)]
+    per_case: bool,
+    /// Scans processed at the same time.
+    #[arg(long, default_value_t = 4)]
+    jobs: usize,
+}
+
+#[derive(Args)]
 struct CropArgs {
     /// The scan the boxes were detected in.
     input: PathBuf,
@@ -89,6 +116,28 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Detect(args) => detect(args),
         Command::Crop(args) => crop(args),
+        Command::Bench(args) => bench::run(bench::BenchArgs {
+            manifest: args.manifest,
+            suites: args.suites,
+            mode: args.mode,
+            options: DetectOptions {
+                inset: args.inset,
+                ..Default::default()
+            },
+            per_case: args.per_case,
+            jobs: args.jobs,
+        }),
+    }
+}
+
+/// Run `mode` on a scan and return its boxes (the one place detectors are chosen).
+fn run_detector(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Vec<RotatedRect> {
+    match mode {
+        Mode::V3 => detect_v3(rgb, options)
+            .regions
+            .into_iter()
+            .map(|r| r.rect)
+            .collect(),
     }
 }
 

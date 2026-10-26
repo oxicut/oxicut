@@ -75,3 +75,18 @@ ScanSplitter ships ground-truth boxes (`benchmarks/manifest.json`; target = "inn
 - **Border and shadow.** On four of the six prints v3 puts the right edge about 21 px too far out (and on one print the bottom edge about 29 px), because the side refinement locks onto the outer paper edge or its drop shadow. This is the white-border case the plan calls out, and it is what v7's per-side inner-edge tightening is for. It is a property of v3, not of the port.
 
 Reproduce with `oxicut detect <scan> --inset 0` and the manifest's rectangles.
+
+## Benchmark parity (v3)
+
+`oxicut bench` ports ScanSplitter's scoring (`benchmark_metrics.py`: Hungarian match on rotated IoU, box quality, F1@0.50 and F1@0.85, coverage, tightness). Run with ScanSplitter's own default trim (`--inset 10`) it reproduces the published v3 numbers:
+
+| Suite | Metric | OxiCut | ScanSplitter (published/run) |
+|---|---|---:|---:|
+| scansplitter (10 scenes) | box quality | 50.6% | 50.6% |
+| | F1@0.50 / F1@0.85 | 57.5% / 42.5% | 57.5% / 42.5% |
+| robust-dev (47) | box quality | 69.4% | 69.7% |
+| | F1@0.50 / F1@0.85 | 79.7% / 46.5% | 79.7% / 47.1% |
+| robust-holdout (47) | box quality | 73.0% | 73.0% |
+| | F1@0.50 / F1@0.85 | 84.8% / 43.3% | 85.7% / 43.8% |
+
+The small gaps (and a few points of tightness) are JPEG-decoder differences on hard images. The target to beat is v7: ScanSplitter reports 88.8% box quality on the robust holdout.

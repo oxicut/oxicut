@@ -3,6 +3,7 @@
 //! Detection is a port of ScanSplitter (GPL-3.0). See `docs/detector-v7-port.md`.
 
 pub mod background;
+pub mod bench;
 pub mod candidates;
 pub mod canny;
 pub mod color;
