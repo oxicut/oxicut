@@ -1,0 +1,21 @@
+# Rust
+target/
+
+# Reference ScanSplitter checkout (not part of this repo)
+reference/
+
+# Frontend
+app/node_modules/
+app/dist/
+
+# Tauri
+app/src-tauri/target/
+app/src-tauri/gen/
+
+# Debug / scratch output
+out/
+
+# IDE
+.idea/
+.vscode/
+*.iml
