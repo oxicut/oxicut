@@ -58,7 +58,8 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 - [x] Image I/O: load JPEG, PNG, TIFF (8 and 16-bit) preserving bit depth. _(`io.rs`; 16-bit TIFF round-trip test; detection copy truncates 16->8 like PIL.)_
 - [x] Downsample for detection (1800 px long side, `INTER_AREA`) and map boxes back to full resolution. _(`resize.rs`, bit-identical to cv2 on 4 test images; `RotatedRect::scaled` maps back.)_
 - [x] Port v3 **background model**: platen/paper colour in Lab sampled from the scan border. _(`color.rs`, `kmeans.rs`, `background.rs`; reproduces Python's clusters exactly on 111 of 114 fixtures, see port notes. Golden data: `benchmarks/golden/v3.json` from `tools/dump_v3_reference.py`.)_
-- [ ] Port v3 **dense non-background region** detection.
+- [x] Port v3 **foreground mask**: Lab distance to the background clusters, Otsu threshold with the 18 floor. _(`foreground.rs`; Otsu equal on all 114 fixtures, pixel counts exact on 106.)_
+- [ ] Port v3 **dense non-background region** detection: density filter, open/close morphology, contours, `minAreaRect`, area/fill/aspect filters, fragment merge, dedupe.
 - [ ] Port v3 **gutter split** for touching prints.
 - [ ] Port v3 **edge snap** of box sides to long physical edges.
 - [ ] `oxcut detect` with `--mode v3` and `--debug` (per-stage overlays + JSON).

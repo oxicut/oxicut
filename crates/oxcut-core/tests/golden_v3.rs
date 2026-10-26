@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use oxcut_core::background::background_colors;
 use oxcut_core::color::rgb_to_lab;
+use oxcut_core::foreground::foreground;
 use oxcut_core::io::{load_image, to_detection_rgb};
 use oxcut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
 use serde::Deserialize;
@@ -22,6 +23,19 @@ struct Golden {
 struct GoldenImage {
     detection_size: [u32; 2],
     backgrounds_lab: Vec<[f32; 3]>,
+    otsu: u8,
+    foreground_count: usize,
+}
+
+/// Python's detection-size RGB for a fixture, as PIL decoded it.
+fn detection_rgb(name: &str) -> image::RgbImage {
+    let image = load_image(
+        &workspace_root()
+            .join("reference/decoded")
+            .join(format!("{name}.png")),
+    )
+    .unwrap();
+    for_detection(&to_detection_rgb(&image), DETECTION_MAX_DIMENSION).image
 }
 
 fn workspace_root() -> PathBuf {
@@ -133,5 +147,58 @@ fn detection_size_and_background_match_python() {
         exact >= report.len() - 5,
         "only {exact} of {} exact",
         report.len()
+    );
+}
+
+#[test]
+fn foreground_matches_python() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut exact, mut otsu_differs, mut worst_relative) = (0, 0, 0f64);
+    let mut worst_same_background = 0f64;
+    for (name, expected) in &golden.images {
+        let lab = rgb_to_lab(&detection_rgb(name));
+        let backgrounds = background_colors(&lab);
+        let ours = foreground(&lab, &backgrounds);
+        let count = ours.mask.iter().filter(|&&b| b).count();
+
+        // Where our background clusters are exactly Python's, everything
+        // downstream must be too; elsewhere allow the tiny drift.
+        let same_background =
+            centre_gap(&backgrounds, &expected.backgrounds_lab).is_some_and(|gap| gap < 0.05);
+        if same_background && ours.otsu == expected.otsu && count == expected.foreground_count {
+            exact += 1;
+        } else {
+            let relative = (count as f64 - expected.foreground_count as f64).abs()
+                / expected.foreground_count.max(1) as f64;
+            worst_relative = worst_relative.max(relative);
+            if same_background {
+                worst_same_background = worst_same_background.max(relative);
+            }
+            if ours.otsu != expected.otsu {
+                otsu_differs += 1;
+            }
+            println!(
+                "  {name}: otsu {} vs {}, foreground {count} vs {} (same background: {same_background})",
+                ours.otsu, expected.otsu, expected.foreground_count
+            );
+        }
+    }
+    println!(
+        "{} images, {exact} exact, {otsu_differs} Otsu differences, worst foreground count error {:.3}%",
+        golden.images.len(),
+        worst_relative * 100.0
+    );
+    // Images whose background clusters differ slightly can move the count a lot
+    // (low-contrast scans); with identical clusters only the few dark-blue Lab
+    // pixels can differ.
+    assert_eq!(otsu_differs, 0, "Otsu threshold differs from Python");
+    assert!(exact >= golden.images.len() - 10, "only {exact} exact");
+    assert!(
+        worst_same_background < 0.001,
+        "foreground count off by {:.4}% despite identical background",
+        worst_same_background * 100.0
     );
 }

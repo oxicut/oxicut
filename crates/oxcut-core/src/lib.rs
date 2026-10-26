@@ -4,6 +4,7 @@
 
 pub mod background;
 pub mod color;
+pub mod foreground;
 pub mod geometry;
 pub mod io;
 pub mod kmeans;
