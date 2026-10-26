@@ -151,6 +151,97 @@ pub fn find_external_contours(mask: &GrayImage) -> Vec<Vec<Point>> {
     contours
 }
 
+/// Every border, outer and hole (`cv2.findContours(RETR_LIST)`): Suzuki and Abe's
+/// border following with 8-connected foreground. Used where enclosed regions matter,
+/// since the border of a hole is the outline of the empty space inside a closed edge.
+pub fn find_all_contours(mask: &GrayImage) -> Vec<Vec<Point>> {
+    let (w, h) = (mask.width() as usize, mask.height() as usize);
+    // One pixel of zeros all round, so neighbours never need bounds checks.
+    let stride = w + 2;
+    let mut labels = vec![0i32; stride * (h + 2)];
+    for y in 0..h {
+        for x in 0..w {
+            labels[(y + 1) * stride + x + 1] = i32::from(mask.as_raw()[y * w + x] != 0);
+        }
+    }
+    let offset = |d: usize| DIRS[d].1 as isize * stride as isize + DIRS[d].0 as isize;
+    let direction_to = |from: usize, to: usize| {
+        let delta = (
+            (to % stride) as isize - (from % stride) as isize,
+            (to / stride) as isize - (from / stride) as isize,
+        );
+        DIRS.iter()
+            .position(|&(dx, dy)| (dx as isize, dy as isize) == delta)
+            .expect("neighbouring pixels")
+    };
+
+    let mut contours = Vec::new();
+    let mut border = 1;
+    for y in 1..=h {
+        for x in 1..=w {
+            let start = y * stride + x;
+            let value = labels[start];
+            if value == 0 {
+                continue;
+            }
+            let first_direction = if value == 1 && labels[start - 1] == 0 {
+                4 // outer border: begin at the empty pixel to the west
+            } else if value > 0 && labels[start + 1] == 0 {
+                0 // hole border: begin at the empty pixel to the east
+            } else {
+                continue;
+            };
+            border += 1;
+
+            // 3.1: first foreground neighbour, clockwise from the start direction.
+            let Some(first) = (0..8)
+                .map(|k| (first_direction + k) % 8)
+                .find(|&d| labels[(start as isize + offset(d)) as usize] != 0)
+            else {
+                labels[start] = -border;
+                contours.push(vec![(x as i32 - 1, y as i32 - 1)]);
+                continue;
+            };
+            let first_pixel = (start as isize + offset(first)) as usize;
+
+            let mut points = Vec::new();
+            let (mut previous, mut current) = (first_pixel, start);
+            loop {
+                points.push(((current % stride) as i32 - 1, (current / stride) as i32 - 1));
+                // 3.3: counter-clockwise from just after `previous`.
+                let from = direction_to(current, previous);
+                let mut east_empty = false;
+                let mut next = None;
+                for k in 1..=8 {
+                    let d = (from + 8 - k) % 8;
+                    let pixel = (current as isize + offset(d)) as usize;
+                    if labels[pixel] != 0 {
+                        next = Some(pixel);
+                        break;
+                    }
+                    if d == 0 {
+                        east_empty = true;
+                    }
+                }
+                let next = next.expect("the previous pixel is foreground");
+                // 3.4: mark the pixel, noting whether its east side is open.
+                if east_empty {
+                    labels[current] = -border;
+                } else if labels[current] == 1 {
+                    labels[current] = border;
+                }
+                // 3.5
+                if next == start && current == first_pixel {
+                    break;
+                }
+                previous = current;
+                current = next;
+            }
+            contours.push(points);
+        }
+    }
+    contours
+}
 /// Area of the polygon through the points (`cv2.contourArea`).
 pub fn contour_area(points: &[Point]) -> f64 {
     let n = points.len();
@@ -281,5 +372,78 @@ mod tests {
     #[test]
     fn empty_mask_has_no_contours() {
         assert!(find_external_contours(&GrayImage::new(8, 8)).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod all_contour_tests {
+    use super::*;
+
+    fn image_from(rows: &[&str]) -> GrayImage {
+        let (w, h) = (rows[0].len(), rows.len());
+        let mut image = GrayImage::new(w as u32, h as u32);
+        for (y, row) in rows.iter().enumerate() {
+            for (x, c) in row.bytes().enumerate() {
+                image.put_pixel(
+                    x as u32,
+                    y as u32,
+                    image::Luma([if c == b'#' { 255 } else { 0 }]),
+                );
+            }
+        }
+        image
+    }
+
+    #[test]
+    fn a_ring_has_an_outer_and_a_hole_border() {
+        let image = image_from(&[
+            "#########",
+            "#.......#",
+            "#.......#",
+            "#.......#",
+            "#########",
+        ]);
+        let mut areas: Vec<f64> = find_all_contours(&image)
+            .iter()
+            .map(|c| contour_area(c))
+            .collect();
+        areas.sort_by(f64::total_cmp);
+        // The hole border only visits pixels that touch the hole edge-on, so it cuts the
+        // four corner pixels off the 8 x 4 outline.
+        assert_eq!(areas, vec![30.0, 32.0]);
+    }
+
+    #[test]
+    fn solid_shapes_agree_with_the_external_finder() {
+        let image = image_from(&[
+            "..........",
+            ".####..##.",
+            ".####..##.",
+            ".#.###....",
+            "..........",
+            "#.........",
+        ]);
+        let mut all: Vec<f64> = find_all_contours(&image)
+            .iter()
+            .map(|c| contour_area(c))
+            .collect();
+        let mut outer: Vec<f64> = find_external_contours(&image)
+            .iter()
+            .map(|c| contour_area(c))
+            .collect();
+        all.sort_by(f64::total_cmp);
+        outer.sort_by(f64::total_cmp);
+        assert_eq!(all, outer);
+    }
+
+    #[test]
+    fn isolated_pixel_and_diagonal_line() {
+        assert_eq!(
+            find_all_contours(&image_from(&["...", ".#.", "..."])),
+            vec![vec![(1, 1)]]
+        );
+        let diagonal = find_all_contours(&image_from(&["#...", ".#..", "..#.", "...#"]));
+        assert_eq!(diagonal.len(), 1);
+        assert_eq!(bounding_rect(&diagonal[0]), (0, 0, 4, 4));
     }
 }

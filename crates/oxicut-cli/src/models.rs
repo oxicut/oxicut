@@ -50,7 +50,8 @@ pub fn run(command: ModelsCommand) -> Result<()> {
             } else {
                 ids.iter()
                     .map(|id| {
-                        oxicut_models::find(id).ok_or_else(|| anyhow::anyhow!("unknown model `{id}`"))
+                        oxicut_models::find(id)
+                            .ok_or_else(|| anyhow::anyhow!("unknown model `{id}`"))
                     })
                     .collect::<Result<_>>()?
             };

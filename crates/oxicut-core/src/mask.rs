@@ -39,6 +39,11 @@ fn reflect101(index: isize, len: usize) -> usize {
 /// `density > 0.16` where density is the normalised box filter of the
 /// foreground over a `window` x `window` neighbourhood.
 pub fn density_mask(foreground: &Foreground, window: usize) -> GrayImage {
+    density_mask_above(foreground, window, DENSITY_THRESHOLD)
+}
+
+/// [`density_mask`] with another threshold (v5's texture mask uses 0.20).
+pub fn density_mask_above(foreground: &Foreground, window: usize, threshold: f32) -> GrayImage {
     let (w, h) = (foreground.width, foreground.height);
     let r = window / 2;
 
@@ -71,7 +76,7 @@ pub fn density_mask(foreground: &Foreground, window: usize) -> GrayImage {
     for y in 0..h {
         for (pixel, &sum) in out.as_mut()[y * w..(y + 1) * w].iter_mut().zip(&column) {
             let density = (sum as f64 * scale) as f32;
-            *pixel = if density > DENSITY_THRESHOLD { 255 } else { 0 };
+            *pixel = if density > threshold { 255 } else { 0 };
         }
         if y + 1 < h {
             let entering = &row_sums[order[y + window] * w..][..w];

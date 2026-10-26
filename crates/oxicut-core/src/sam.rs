@@ -12,6 +12,7 @@ use ort::value::Tensor;
 
 use crate::contours::{contour_area, find_external_contours};
 use crate::geometry::{RotatedRect, min_area_rect, overlap_fraction};
+use crate::resize::resize_area;
 
 /// Long side the encoder is fed.
 const ENCODER_SIDE: f64 = 1024.0;
@@ -94,7 +95,8 @@ impl MobileSam {
         let height = ((source_height as f64 * scale).round() as u32).max(1);
         let resized = resize_area(rgb, width, height);
         let pixels: Vec<f32> = resized.as_raw().iter().map(|&v| v as f32).collect();
-        let input = Tensor::from_array((vec![height as i64, width as i64, 3], pixels)).map_err(rt)?;
+        let input =
+            Tensor::from_array((vec![height as i64, width as i64, 3], pixels)).map_err(rt)?;
         let outputs = self
             .encoder
             .run(ort::inputs!["input_image" => input])
@@ -113,7 +115,8 @@ impl MobileSam {
 
     /// Mask for a box prompt `(x1, y1, x2, y2)` given in encoder-image pixels.
     pub fn mask(&mut self, embedding: &Embedding, prompt: [f32; 4]) -> Result<Mask, SamError> {
-        let tensor = |shape: Vec<i64>, data: Vec<f32>| Tensor::from_array((shape, data)).map_err(rt);
+        let tensor =
+            |shape: Vec<i64>, data: Vec<f32>| Tensor::from_array((shape, data)).map_err(rt);
         let outputs = self
             .decoder
             .run(ort::inputs![
@@ -236,81 +239,31 @@ pub fn mask_rect(mask: &Mask, proposal: &RotatedRect) -> Option<RotatedRect> {
     best.map(|(_, rect)| rect)
 }
 
-/// `cv2.resize(..., INTER_AREA)` for an RGB image that is shrunk (or kept): every
-/// output pixel averages the source area it covers, partial pixels by their share.
-pub fn resize_area(src: &RgbImage, width: u32, height: u32) -> RgbImage {
-    if (width, height) == src.dimensions() {
-        return src.clone();
-    }
-    let (sw, sh) = (src.width() as usize, src.height() as usize);
-    let (dw, dh) = (width as usize, height as usize);
-    let xs = area_weights(sw, dw);
-    let ys = area_weights(sh, dh);
-    let raw = src.as_raw();
-    // Vertical pass first into f32 rows, then horizontal, like OpenCV's buffer.
-    let mut out = vec![0u8; dw * dh * 3];
-    let mut column = vec![0f32; sw * 3];
-    for (dy, rows) in ys.iter().enumerate() {
-        column.fill(0.0);
-        for &(sy, weight) in rows {
-            let row = &raw[sy * sw * 3..(sy + 1) * sw * 3];
-            for (acc, &v) in column.iter_mut().zip(row) {
-                *acc += v as f32 * weight;
-            }
-        }
-        for (dx, cols) in xs.iter().enumerate() {
-            for channel in 0..3 {
-                let mut sum = 0f32;
-                for &(sx, weight) in cols {
-                    sum += column[sx * 3 + channel] * weight;
-                }
-                out[(dy * dw + dx) * 3 + channel] = sum.round().clamp(0.0, 255.0) as u8;
-            }
-        }
-    }
-    RgbImage::from_raw(width, height, out).expect("sized buffer")
+thread_local! {
+    static THREAD_SAM: std::cell::RefCell<Option<(std::path::PathBuf, std::path::PathBuf, MobileSam)>> =
+        const { std::cell::RefCell::new(None) };
 }
 
-/// For each output index, the `(source index, weight)` pairs covering it.
-fn area_weights(source: usize, target: usize) -> Vec<Vec<(usize, f32)>> {
-    let scale = source as f64 / target as f64;
-    (0..target)
-        .map(|d| {
-            let start = d as f64 * scale;
-            let end = ((d + 1) as f64 * scale).min(source as f64);
-            let cell = scale.min(source as f64 - start);
-            let first = start.floor() as usize;
-            let last = (end.ceil() as usize).min(source);
-            (first..last)
-                .filter_map(|s| {
-                    let overlap = end.min(s as f64 + 1.0) - start.max(s as f64);
-                    (overlap > 1e-12).then(|| (s, (overlap / cell) as f32))
-                })
-                .collect()
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn area_resize_by_whole_factor_averages_blocks() {
-        let mut src = RgbImage::new(4, 2);
-        for (i, pixel) in src.pixels_mut().enumerate() {
-            let v = [10, 20, 30, 40, 50, 60, 70, 80][i];
-            *pixel = image::Rgb([v, v, v]);
+/// Run `f` with this thread's MobileSAM sessions, loading them on first use. A session
+/// needs exclusive access to run, so each worker thread keeps its own.
+pub fn with_thread_sam<R>(
+    encoder: &Path,
+    decoder: &Path,
+    f: impl FnOnce(&mut MobileSam) -> R,
+) -> Result<R, SamError> {
+    THREAD_SAM.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        let current = slot
+            .as_ref()
+            .is_some_and(|(e, d, _)| e == encoder && d == decoder);
+        if !current {
+            *slot = Some((
+                encoder.to_path_buf(),
+                decoder.to_path_buf(),
+                MobileSam::load(encoder, decoder)?,
+            ));
         }
-        let out = resize_area(&src, 2, 1);
-        assert_eq!(out.get_pixel(0, 0).0, [35, 35, 35]); // (10+20+50+60)/4
-        assert_eq!(out.get_pixel(1, 0).0, [55, 55, 55]); // (30+40+70+80)/4
-    }
-
-    #[test]
-    fn area_resize_keeps_flat_colour_for_fractional_factor() {
-        let src = RgbImage::from_pixel(10, 7, image::Rgb([200, 100, 50]));
-        let out = resize_area(&src, 4, 3);
-        assert!(out.pixels().all(|p| p.0 == [200, 100, 50]));
-    }
+        let (_, _, sam) = slot.as_mut().expect("loaded above");
+        Ok(f(sam))
+    })
 }

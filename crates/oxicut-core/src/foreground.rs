@@ -5,6 +5,8 @@ use crate::color::LabImage;
 
 /// Foreground never starts below this Lab distance, whatever Otsu says.
 const MIN_COLOR_THRESHOLD: f32 = 18.0;
+/// The floor when the Otsu threshold is capped.
+const CAPPED_MIN_COLOR_THRESHOLD: f32 = 12.0;
 
 pub struct Foreground {
     pub width: usize,
@@ -71,11 +73,22 @@ pub fn otsu_threshold(values: &[u8]) -> u8 {
 }
 
 pub fn foreground(lab: &LabImage, backgrounds: &[[f32; 3]]) -> Foreground {
+    foreground_capped(lab, backgrounds, None)
+}
+
+/// [`foreground`] with v7's optional cap on the Otsu threshold: when large pale areas (lid,
+/// bright page edge) push Otsu far above the contrast of light photographs, the cap keeps
+/// them in, and the floor drops from 18 to 12.
+pub fn foreground_capped(lab: &LabImage, backgrounds: &[[f32; 3]], cap: Option<f32>) -> Foreground {
     let delta = background_distance(lab, backgrounds);
     // numpy: np.clip(delta, 0, 255).astype(np.uint8) truncates toward zero.
     let quantised: Vec<u8> = delta.iter().map(|&d| d.clamp(0.0, 255.0) as u8).collect();
     let otsu = otsu_threshold(&quantised);
-    let threshold = MIN_COLOR_THRESHOLD.max(otsu as f32);
+    let (floor, level) = match cap {
+        Some(cap) => (CAPPED_MIN_COLOR_THRESHOLD, (otsu as f32).min(cap)),
+        None => (MIN_COLOR_THRESHOLD, otsu as f32),
+    };
+    let threshold = floor.max(level);
     Foreground {
         width: lab.width,
         height: lab.height,

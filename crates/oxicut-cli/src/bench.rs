@@ -47,7 +47,7 @@ fn run_case(root: &Path, case: &Case, args: &BenchArgs) -> Result<CaseScore> {
     drop(image);
 
     let started = Instant::now();
-    let found = crate::run_detector(args.mode, &rgb, &args.options);
+    let found = crate::run_detector(args.mode, &rgb, &args.options)?;
     let seconds = started.elapsed().as_secs_f64();
 
     let expected: Vec<RotatedRect> = case

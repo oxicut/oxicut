@@ -10,7 +10,7 @@ use image::{GrayImage, RgbImage};
 use crate::background::background_colors;
 use crate::candidates::candidate_rects;
 use crate::color::{rgb_to_gray, rgb_to_lab};
-use crate::foreground::foreground;
+use crate::foreground::foreground_capped;
 use crate::geometry::RotatedRect;
 use crate::mask::region_mask;
 use crate::merge::{deduplicate, merge_fragments};
@@ -134,6 +134,15 @@ pub fn regions_from_rects(
     regions
 }
 pub fn detect_v3(source: &RgbImage, options: &DetectOptions) -> Detection {
+    detect_v3_capped(source, options, None)
+}
+
+/// [`detect_v3`] with an optional cap on the colour threshold (v7's second proposal set).
+pub fn detect_v3_capped(
+    source: &RgbImage,
+    options: &DetectOptions,
+    color_cap: Option<f32>,
+) -> Detection {
     let (original_width, original_height) = source.dimensions();
     let working = for_detection(source, options.detection_max_dimension);
     let scale = working.scale;
@@ -143,7 +152,7 @@ pub fn detect_v3(source: &RgbImage, options: &DetectOptions) -> Detection {
 
     let lab = rgb_to_lab(small);
     let backgrounds = background_colors(&lab);
-    let fg = foreground(&lab, &backgrounds);
+    let fg = foreground_capped(&lab, &backgrounds, color_cap);
     let mask = region_mask(&fg);
 
     let minimum_area = options.min_area_ratio * total_area;

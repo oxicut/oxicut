@@ -13,7 +13,7 @@ use oxicut_core::RotatedRect;
 use oxicut_core::detect::{DetectOptions, Detection, detect_v3};
 use oxicut_core::export::{Collision, ExportSettings, OutputFormat, export_regions};
 use oxicut_core::io::{load_image, to_detection_rgb};
-use oxicut_core::v7::detect_v7_lite;
+use oxicut_core::v7::{detect_v7, detect_v7_lite};
 
 use boxes::{BoxRegion, BoxesFile};
 
@@ -47,6 +47,9 @@ enum Mode {
     V3,
     /// v3 plus v7's inner-edge tightening: boxes move off white borders and shadows.
     V7Lite,
+    /// Full v7: MobileSAM anchors, several proposal sets and evidence-based arbitration.
+    /// Needs the models (`oxicut models download`).
+    V7,
 }
 
 impl Mode {
@@ -55,6 +58,7 @@ impl Mode {
         match self {
             Mode::V3 => "v3",
             Mode::V7Lite => "v7-lite",
+            Mode::V7 => "v7",
         }
     }
 }
@@ -149,20 +153,38 @@ fn main() -> Result<()> {
 }
 
 /// Run `mode` on a scan (the one place detectors are chosen).
-fn run_detection(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Detection {
-    match mode {
+fn run_detection(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Result<Detection> {
+    Ok(match mode {
         Mode::V3 => detect_v3(rgb, options),
         Mode::V7Lite => detect_v7_lite(rgb, options),
+        Mode::V7 => detect_full_v7(rgb, options)?,
+    })
+}
+
+/// Full v7 on this thread's MobileSAM sessions.
+fn detect_full_v7(rgb: &image::RgbImage, options: &DetectOptions) -> Result<Detection> {
+    let dir = oxicut_models::models_dir()?;
+    let encoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_ENCODER);
+    let decoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_DECODER);
+    if !encoder.is_file() || !decoder.is_file() {
+        bail!("the v7 detector needs the MobileSAM models: run `oxicut models download`");
     }
+    let (detection, _) =
+        oxicut_core::sam::with_thread_sam(&encoder, &decoder, |sam| detect_v7(rgb, options, sam))??;
+    Ok(detection)
 }
 
 /// Just the boxes.
-fn run_detector(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Vec<RotatedRect> {
-    run_detection(mode, rgb, options)
+fn run_detector(
+    mode: Mode,
+    rgb: &image::RgbImage,
+    options: &DetectOptions,
+) -> Result<Vec<RotatedRect>> {
+    Ok(run_detection(mode, rgb, options)?
         .regions
         .into_iter()
         .map(|r| r.rect)
-        .collect()
+        .collect())
 }
 fn detect(args: DetectArgs) -> Result<()> {
     if !(0.0..=100.0).contains(&args.min_area) || !(0.0..=100.0).contains(&args.max_area) {
@@ -178,7 +200,7 @@ fn detect(args: DetectArgs) -> Result<()> {
         inset: args.inset,
         ..Default::default()
     };
-    let detection = run_detection(args.mode, &source, &options);
+    let detection = run_detection(args.mode, &source, &options)?;
 
     let file = BoxesFile {
         version: 1,

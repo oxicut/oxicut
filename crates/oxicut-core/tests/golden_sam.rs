@@ -82,11 +82,16 @@ fn mobilesam_matches_scansplitter() {
     let mut sam = MobileSam::load(&encoder, &decoder).unwrap();
 
     for (name, expected) in &golden.images {
-        let decoded = load_image(&root.join("reference/decoded").join(format!("{name}.png"))).unwrap();
+        let decoded =
+            load_image(&root.join("reference/decoded").join(format!("{name}.png"))).unwrap();
         let rgb = to_detection_rgb(&decoded);
         let embedding = sam.embed(&rgb).unwrap();
 
-        assert_eq!(embedding.shape(), expected.embedding_shape, "{name}: embedding shape");
+        assert_eq!(
+            embedding.shape(),
+            expected.embedding_shape,
+            "{name}: embedding shape"
+        );
         let sum: f64 = embedding.data().iter().map(|&v| v as f64).sum();
         let relative = (sum - expected.embedding_sum).abs() / expected.embedding_sum.abs().max(1.0);
         let head_diff = embedding
@@ -96,7 +101,11 @@ fn mobilesam_matches_scansplitter() {
             .map(|(a, b)| (a - b).abs())
             .fold(0.0f32, f32::max);
         eprintln!("{name}: embedding sum off by {relative:.2e}, head max diff {head_diff:.2e}");
-        assert!(relative < 1e-3, "{name}: embedding sum {sum} vs {}", expected.embedding_sum);
+        assert!(
+            relative < 1e-3,
+            "{name}: embedding sum {sum} vs {}",
+            expected.embedding_sum
+        );
 
         let proposals: Vec<RotatedRect> = expected.proposals.iter().map(|&r| r.into()).collect();
         for (i, proposal) in proposals.iter().enumerate() {
@@ -109,9 +118,16 @@ fn mobilesam_matches_scansplitter() {
                 "{name}[{i}]: iou {:.4} vs {:.4}, mask {pixels} vs {} px",
                 mask.predicted_iou, want.predicted_iou, want.mask_pixels
             );
-            assert!((mask.predicted_iou - want.predicted_iou).abs() < 0.01, "{name}[{i}] iou");
+            assert!(
+                (mask.predicted_iou - want.predicted_iou).abs() < 0.01,
+                "{name}[{i}] iou"
+            );
             let drift = pixels.abs_diff(want.mask_pixels) as f64 / want.mask_pixels.max(1) as f64;
-            assert!(drift < 0.01, "{name}[{i}] mask pixels {pixels} vs {}", want.mask_pixels);
+            assert!(
+                drift < 0.01,
+                "{name}[{i}] mask pixels {pixels} vs {}",
+                want.mask_pixels
+            );
         }
 
         let refined = sam.refine_rectangles(&rgb, &proposals, 0.04).unwrap();
