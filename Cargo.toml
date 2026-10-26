@@ -7,6 +7,13 @@ members = [
     "app/src-tauri",
 ]
 
+# Image processing is unusably slow unoptimised; keep debug assertions on.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev.package.oxcut-core]
+opt-level = 3
+
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
