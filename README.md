@@ -1,4 +1,4 @@
-# Oxcut
+# OxCut
 
 A native desktop app (Windows first) that splits flatbed scans containing one or more photo prints or postcards into separate, deskewed images. Works fully automatically or with a review UI of rotatable marquees.
 
@@ -10,4 +10,4 @@ The detection pipeline is a Rust port of [ScanSplitter](https://github.com/Madne
 
 ## License
 
-Oxcut is a derivative work of ScanSplitter and is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+OxCut is a derivative work of ScanSplitter and is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).

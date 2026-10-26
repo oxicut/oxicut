@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["crates/oxcut-core", "crates/oxcut-models", "crates/oxcut-cli"]
+members = [
+    "crates/oxcut-core",
+    "crates/oxcut-models",
+    "crates/oxcut-cli",
+    "app/src-tauri",
+]
 
 [workspace.package]
 version = "0.1.0"

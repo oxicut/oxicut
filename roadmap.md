@@ -1,4 +1,4 @@
-# Oxcut Roadmap
+# OxCut Roadmap
 
 A native desktop app (Windows first) that takes a batch of flatbed scans (JPEG, PNG, TIFF incl. 16-bit) holding one or more photo prints or postcards, detects each item, deskews it, and exports it as its own image. It runs either fully automatically or after the user adjusts rotatable marquees in a review UI.
 
@@ -8,7 +8,7 @@ Each phase ends with something you can run and check against the definition of d
 
 ## Note to the Claude Code session (read this first)
 
-- **Engine first, GUI later.** Build a pure library crate with a CLI. Don't start the Tauri shell until Phase 2's definition of done passes.
+- **UI shell first, then the engine behind it.** (Changed 2026-10-26 at the user's request; the original plan was engine and CLI first.) Phase 0.5 builds the Tauri app with mock data so there is an exe to double-click. The engine is still a pure library crate with a CLI, and Phases 1 and 2 continue as written. Wire the real engine into the UI in Phase 3.
 - **Port behaviour, not Python idioms.** Before writing detection code, read `docs/specs/detector-v7.md`, `detector_v7.py`, `detector_v5.py`, `detector_v3.py` and the MobileSAM loading/inference code in `reference/ScanSplitter`. Record every deviation in `docs/detector-v7-port.md`.
 - **Debug output for every detector stage** (PNG with overlays + JSON of boxes), reachable from the CLI.
 - **No OpenCV.** Use `image` / `imageproc` / `ndarray`. If a routine has no Rust equivalent, implement it.
@@ -36,6 +36,17 @@ Resume from the checkboxes: the first unchecked `[ ]` item, read top to bottom, 
 - [x] Clone the **reference checkout** (gitignored): `git clone https://github.com/Madnex/ScanSplitter reference/ScanSplitter`, then `uv sync` inside it, and confirm `uv run scansplitter process ...` works. _(scansplitter 0.8.0, CPython 3.13.17 venv; `uv run scansplitter --help` works.)_
 - [x] (Optional) `cargo install cargo-nextest cargo-watch`. _(cargo-nextest 0.9.149, cargo-watch 8.5.3.)_
 
+## Phase 0.5: UI shell with mock data
+
+Goal: double-click `oxcut-app.exe` and see the whole interface, working on sample data. Nothing here touches real scans yet.
+
+- [x] Scaffold `app/` with Tauri 2 + Vue 3 + TypeScript; crate `oxcut-app`, exe `oxcut-app.exe`, product name "OxCut", added to the Cargo workspace.
+- [x] Layout: scan queue (left), Fabric.js review canvas (centre), settings and model manager (right), status bar, first-run welcome dialog.
+- [x] Review canvas on mock scans: rotatable/resizable marquees, add, delete, split, straighten, zoom/pan, Shift-snap rotation, Enter/arrow/Delete keys.
+- [x] Light and dark themes follow the system.
+- [x] Release exe builds (`cd app; cargo tauri build --no-bundle` -> `target\release\oxcut-app.exe`, 9 MB), launches, and renders the UI; verified by screenshot including box selection.
+- [x] Commit.
+
 ## Phase 1: Workspace + v3 port + CLI
 
 Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotated rects: cx, cy, w, h, angle, in source px) and `debug.png` with boxes drawn.
@@ -52,7 +63,7 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 - [ ] Port v3 **edge snap** of box sides to long physical edges.
 - [ ] `oxcut detect` with `--mode v3` and `--debug` (per-stage overlays + JSON).
 - [ ] Crop: rotate full-res around box centre, axis-aligned crop, optional inset px, preserve bit depth. `oxcut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`.
-- [ ] **Done when:** v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap.
+- [ ] **Done when:** v3 boxes within Ã‚Â±2 px / Ã‚Â±0.5Ã‚Â° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap.
 - [ ] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 2: Model registry, MobileSAM via `ort`, v5, v7, benchmark
@@ -84,7 +95,7 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 ## Phase 4: Review mode (marquee editor)
 
 - [ ] Per-scan Vue view: scan on a Fabric.js canvas, one rotatable/resizable rect per box.
-- [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0° with a modifier key, zoom/pan.
+- [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0Ã‚Â° with a modifier key, zoom/pan.
 - [ ] Keyboard: Enter = approve & advance, arrows = move through queue, Delete = remove box.
 - [ ] Flags (warnings): no item found, box touches scan edge, unusual aspect ratio/size, overlapping boxes. Auto-approve unflagged scans.
 - [ ] **Done when:** a scan can be fully corrected by mouse + keyboard without touching settings.
