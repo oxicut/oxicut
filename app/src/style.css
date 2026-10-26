@@ -161,6 +161,7 @@ kbd {
 .field {
   display: grid;
   gap: 0.3rem;
+  min-width: 0;
 }
 .field > span,
 .field > label {
@@ -170,6 +171,8 @@ kbd {
 .field input[type="text"],
 .field input[type="number"],
 .field select {
+  width: 100%;
+  min-width: 0;
   height: 30px;
   padding: 0 0.5rem;
   background: var(--surface);

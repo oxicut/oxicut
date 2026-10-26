@@ -214,11 +214,12 @@ const openModelsFolder = () =>
   flex: 1;
   min-height: 0;
   padding: 0.9rem;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 .grid2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.6rem;
 }
 .check {
