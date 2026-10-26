@@ -44,8 +44,8 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 - [x] Add `LICENSE` (GPL-3.0), `README.md` with ScanSplitter attribution, `.gitignore` (`target/`, `reference/`, `app/node_modules/`).
 - [x] Create `docs/PROGRESS.md` and `docs/detector-v7-port.md`.
 - [x] Read the reference detector spec and v3 source before writing code. _(Notes, plan corrections and parity risks in `docs/detector-v7-port.md`. v3/v5 live in `detector.py`, not separate files.)_
-- [ ] Image I/O: load JPEG, PNG, TIFF (8 and 16-bit) preserving bit depth.
-- [ ] Downsample for detection (1800 px long side, `INTER_AREA`) and map boxes back to full resolution.
+- [x] Image I/O: load JPEG, PNG, TIFF (8 and 16-bit) preserving bit depth. _(`io.rs`; 16-bit TIFF round-trip test; detection copy truncates 16->8 like PIL.)_
+- [x] Downsample for detection (1800 px long side, `INTER_AREA`) and map boxes back to full resolution. _(`resize.rs`, bit-identical to cv2 on 4 test images; `RotatedRect::scaled` maps back.)_
 - [ ] Port v3 **background model**: platen/paper colour in Lab sampled from the scan border.
 - [ ] Port v3 **dense non-background region** detection.
 - [ ] Port v3 **gutter split** for touching prints.

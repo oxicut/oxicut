@@ -41,9 +41,10 @@ Source: `detector.py` lines 15-545 (`detect_photos_v3` and the `_v3_*` helpers, 
 - **`HoughLinesP`** is randomised in OpenCV (it samples points in random order). The snapped angle is a weighted mean, so it should be stable, but individual line segments won't match. Possible substitute: deterministic standard Hough + segment extraction, if the angle stays within ±0.5°.
 - **Resize, Lab and Gaussian kernels** need OpenCV's exact rounding/coefficients, or small threshold-boundary differences will move the contours.
 
-### Deviations
+### Deviations and parity checks
 
-_None yet._
+- **Resize (`resize.rs`)**: `INTER_AREA` reimplemented (integer block average and fractional coverage weights). Checked against cv2 on four random 8-bit RGB inputs including 4000x3000 -> 1800x1350 and 701x503 -> 233x167: bit-identical (max diff 0).
+- **16-bit input**: PIL's `convert("RGB")` keeps the high byte (`v >> 8`); the `image` crate rounds. `to_detection_rgb` truncates like PIL. Only the detection copy is 8-bit; crops keep the source bit depth. 16-bit greyscale TIFFs are not verified against PIL (it treats `I;16` differently) and are untested.
 
 ## v5
 

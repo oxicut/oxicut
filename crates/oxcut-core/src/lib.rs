@@ -1,14 +1,9 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Oxcut engine: detection, deskew, crop and export of photos on flatbed scans.
+//!
+//! Detection is a port of ScanSplitter (GPL-3.0). See `docs/detector-v7-port.md`.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod geometry;
+pub mod io;
+pub mod resize;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use geometry::RotatedRect;
