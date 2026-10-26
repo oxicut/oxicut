@@ -31,7 +31,9 @@ pub struct ModelSpec<'a> {
     pub approx_bytes: u64,
 }
 
-/// MobileSAM revision ScanSplitter pins; the hashes below belong to it.
+/// MobileSAM revision ScanSplitter pins; the hashes below belong to it. The URLs spell it
+/// out (statics cannot interpolate), and a test keeps the two in step.
+#[cfg(test)]
 const MOBILESAM_REVISION: &str = "0d3b403339b4674a82493d5e97964dd78089ddc8";
 
 pub static MOBILESAM_ENCODER: ModelSpec<'static> = ModelSpec {
