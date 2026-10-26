@@ -21,6 +21,11 @@ from scansplitter import detector as d
 DETECTION_MAX_DIMENSION = 1800
 
 
+def rect_json(rect) -> dict:
+    (cx, cy), (w, h), angle = rect
+    return {"cx": cx, "cy": cy, "w": w, "h": h, "angle": angle}
+
+
 def stages(image: Image.Image) -> dict:
     rgb = np.asarray(image.convert("RGB"))
     original_height, original_width = rgb.shape[:2]
@@ -39,7 +44,57 @@ def stages(image: Image.Image) -> dict:
         np.clip(delta, 0, 255).astype(np.uint8), 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU
     )
     foreground = delta > max(18.0, float(otsu))
+
+    # Same steps as detect_photos_v3 after the foreground mask.
+    density_window = max(11, round(min(height, width) * 0.010)) | 1
+    density = cv2.boxFilter(
+        foreground.astype(np.float32), cv2.CV_32F, (density_window, density_window)
+    )
+    mask = (density > 0.16).astype(np.uint8) * 255
+    density_count = int(np.count_nonzero(mask))
+    open_size = max(5, round(min(height, width) * 0.010)) | 1
+    close_size = max(5, round(min(height, width) * 0.008)) | 1
+    mask = cv2.morphologyEx(
+        mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_size, open_size))
+    )
+    opened_count = int(np.count_nonzero(mask))
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (close_size, close_size)),
+        iterations=2,
+    )
+    mask_count = int(np.count_nonzero(mask))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    total_area = height * width
+    minimum_area, maximum_area = 0.02 * total_area, 0.80 * total_area
+    contour_rects = []
+    candidates = []
+    for contour in contours:
+        rect = cv2.minAreaRect(contour)
+        rect_width, rect_height = rect[1]
+        x, y, box_width, box_height = cv2.boundingRect(contour)
+        area = cv2.contourArea(contour)
+        contour_rects.append(
+            {"area": area, "bbox": [x, y, box_width, box_height], "rect": rect_json(rect)}
+        )
+        rect_area = rect_width * rect_height
+        if not minimum_area <= rect_area <= maximum_area:
+            continue
+        component_fill = area / max(1, box_width * box_height)
+        aspect = max(rect_width, rect_height) / max(1, min(rect_width, rect_height))
+        if component_fill < 0.32 or aspect > 5.0:
+            continue
+        candidates.append(rect_json(rect))
     return {
+        "density_window": density_window,
+        "open_size": open_size,
+        "close_size": close_size,
+        "density_count": density_count,
+        "opened_count": opened_count,
+        "mask_count": mask_count,
+        "contours": contour_rects,
+        "candidates": candidates,
         "detection_size": [width, height],
         "scale": scale,
         "backgrounds_lab": sorted(

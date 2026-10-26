@@ -8,9 +8,13 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use oxcut_core::background::background_colors;
+use oxcut_core::candidates::candidate_rects;
 use oxcut_core::color::rgb_to_lab;
+use oxcut_core::contours::{contour_info, find_external_contours};
 use oxcut_core::foreground::foreground;
+use oxcut_core::geometry::RotatedRect;
 use oxcut_core::io::{load_image, to_detection_rgb};
+use oxcut_core::mask::{Element, close, close_size, density_mask, density_window, open, open_size};
 use oxcut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
 use serde::Deserialize;
 
@@ -25,6 +29,51 @@ struct GoldenImage {
     backgrounds_lab: Vec<[f32; 3]>,
     otsu: u8,
     foreground_count: usize,
+    density_count: usize,
+    opened_count: usize,
+    mask_count: usize,
+    contours: Vec<GoldenContour>,
+    candidates: Vec<GoldenRect>,
+}
+
+#[derive(Deserialize)]
+struct GoldenContour {
+    area: f64,
+    bbox: [i32; 4],
+    rect: GoldenRect,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+struct GoldenRect {
+    cx: f64,
+    cy: f64,
+    w: f64,
+    h: f64,
+    angle: f64,
+}
+
+impl GoldenRect {
+    fn canonical(self) -> RotatedRect {
+        RotatedRect::new(self.cx, self.cy, self.w, self.h, self.angle).canonical()
+    }
+}
+
+/// Largest difference between two canonical rectangles (centre, sides, angle).
+fn rect_gap(a: RotatedRect, b: RotatedRect) -> f64 {
+    // A near-square has no meaningful long side, so its angle is only defined
+    // modulo 90 degrees.
+    let period = if (a.w - a.h).abs() < 1.0 { 90.0 } else { 180.0 };
+    let mut angle = (a.angle - b.angle).abs() % period;
+    angle = angle.min(period - angle);
+    [
+        (a.cx - b.cx).abs(),
+        (a.cy - b.cy).abs(),
+        (a.w - b.w).abs(),
+        (a.h - b.h).abs(),
+        angle,
+    ]
+    .into_iter()
+    .fold(0.0, f64::max)
 }
 
 /// Python's detection-size RGB for a fixture, as PIL decoded it.
@@ -201,4 +250,122 @@ fn foreground_matches_python() {
         "foreground count off by {:.4}% despite identical background",
         worst_same_background * 100.0
     );
+}
+
+#[test]
+fn mask_contours_and_candidates_match_python() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut counts_exact, mut contours_exact, mut candidates_exact) = (0, 0, 0);
+    let mut worst_rect_gap = 0f64;
+    let mut problems = Vec::new();
+
+    for (name, expected) in &golden.images {
+        let lab = rgb_to_lab(&detection_rgb(name));
+        let fg = foreground(&lab, &background_colors(&lab));
+        let min_side = fg.width.min(fg.height);
+        let dense = density_mask(&fg, density_window(min_side));
+        let opened = open(&dense, &Element::ellipse(open_size(min_side)));
+        let closed = close(&opened, &Element::rect(close_size(min_side)), 2);
+        let count = |m: &image::GrayImage| m.as_raw().iter().filter(|&&v| v != 0).count();
+        let ours = (count(&dense), count(&opened), count(&closed));
+        let theirs = (
+            expected.density_count,
+            expected.opened_count,
+            expected.mask_count,
+        );
+        if ours == theirs {
+            counts_exact += 1;
+        } else {
+            problems.push(format!("{name}: mask counts {ours:?} vs python {theirs:?}"));
+        }
+
+        // Contours, matched by position since discovery order may differ.
+        let mut our_contours: Vec<_> = find_external_contours(&closed)
+            .iter()
+            .map(|c| contour_info(c))
+            .collect();
+        our_contours.sort_by_key(|c| (c.bbox.1, c.bbox.0, c.area as i64));
+        let mut their_contours: Vec<&GoldenContour> = expected.contours.iter().collect();
+        their_contours.sort_by_key(|c| (c.bbox[1], c.bbox[0], c.area as i64));
+        let contours_equal = our_contours.len() == their_contours.len()
+            && our_contours.iter().zip(&their_contours).all(|(a, b)| {
+                a.area == b.area
+                    && [a.bbox.0, a.bbox.1, a.bbox.2, a.bbox.3] == b.bbox
+                    // Tiny blobs have ill-defined angles; only compare real ones.
+                    && (b.area < 400.0 || {
+                        let gap = rect_gap(a.rect.canonical(), b.rect.canonical());
+                        worst_rect_gap = worst_rect_gap.max(gap);
+                        gap < 0.05
+                    })
+            });
+        if contours_equal {
+            contours_exact += 1;
+        } else {
+            problems.push(format!(
+                "{name}: contours differ ({} vs python {})",
+                our_contours.len(),
+                their_contours.len()
+            ));
+        }
+
+        let mut our_candidates: Vec<_> = candidate_rects(&closed, 0.02, 0.80)
+            .iter()
+            .map(|r| r.canonical())
+            .collect();
+        let their_candidates: Vec<_> = expected.candidates.iter().map(|r| r.canonical()).collect();
+        let our_count = our_candidates.len();
+        // Each of theirs must have a distinct counterpart of ours (order differs).
+        let candidates_equal = our_count == their_candidates.len() && {
+            let mut unused = std::mem::take(&mut our_candidates);
+            their_candidates.iter().all(|b| {
+                let best = unused
+                    .iter()
+                    .enumerate()
+                    .map(|(i, a)| (i, rect_gap(*a, *b)))
+                    .min_by(|x, y| x.1.total_cmp(&y.1));
+                best.is_some_and(|(i, gap)| {
+                    if gap < 1.0 {
+                        worst_rect_gap = worst_rect_gap.max(gap);
+                    }
+                    unused.swap_remove(i);
+                    gap < 0.05
+                })
+            })
+        };
+        if candidates_equal {
+            candidates_exact += 1;
+        } else {
+            problems.push(format!(
+                "{name}: candidates differ ({our_count} vs python {})",
+                their_candidates.len()
+            ));
+        }
+    }
+
+    let n = golden.images.len();
+    println!(
+        "{n} images: mask counts exact {counts_exact}, contours exact {contours_exact}, candidates exact {candidates_exact}; worst rect gap {worst_rect_gap:.4}"
+    );
+    for problem in &problems {
+        println!("  {problem}");
+    }
+    // The misses are images whose foreground already differed from Python's by
+    // a few pixels (or by 10% on one low-contrast scan); the mask stage itself
+    // is exact when given the same foreground.
+    assert!(
+        counts_exact >= n - 8,
+        "mask counts exact on only {counts_exact}"
+    );
+    assert!(
+        contours_exact >= n - 6,
+        "contours exact on only {contours_exact}"
+    );
+    assert!(
+        candidates_exact >= n - 3,
+        "candidates exact on only {candidates_exact}"
+    );
+    assert!(worst_rect_gap < 0.05, "rectangle gap {worst_rect_gap}");
 }
