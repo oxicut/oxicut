@@ -1,19 +1,18 @@
 //! `oxicut`: detect and crop prints from flatbed scans.
 
 mod boxes;
-mod output;
 mod overlay;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use oxicut_core::crop::crop_region;
+use oxicut_core::RotatedRect;
 use oxicut_core::detect::{DetectOptions, detect_v3};
+use oxicut_core::export::{Collision, ExportSettings, OutputFormat, export_regions};
 use oxicut_core::io::{load_image, to_detection_rgb};
 
 use boxes::{BoxRegion, BoxesFile};
-use output::Format;
 
 #[derive(Parser)]
 #[command(
@@ -189,49 +188,64 @@ fn crop(args: CropArgs) -> Result<()> {
             file.height
         );
     }
-    std::fs::create_dir_all(&args.output)?;
-
-    let stem = args
-        .input
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "scan".into());
-    let format = args.format.resolve(&args.input);
-    let mut written = 0;
-    for (index, region) in file.regions.iter().enumerate() {
-        let rect =
-            oxicut_core::RotatedRect::new(region.cx, region.cy, region.w, region.h, region.angle);
-        let Some(crop) = crop_region(&image, &rect) else {
-            eprintln!("skipping box {}: empty after clipping", index + 1);
-            continue;
-        };
-        let path = args
-            .output
-            .join(format!("{stem}-{}.{}", index + 1, format.extension()));
-        refuse_to_overwrite_source(&path, &args.input)?;
-        output::save(&crop, &path, format, args.quality)?;
+    let regions: Vec<RotatedRect> = file
+        .regions
+        .iter()
+        .map(|r| RotatedRect::new(r.cx, r.cy, r.w, r.h, r.angle))
+        .collect();
+    let settings = ExportSettings {
+        format: args.format.into(),
+        jpeg_quality: args.quality,
+        pattern: "{source}-{n}".into(),
+        // Re-running a command line export refreshes its files.
+        collision: Collision::Overwrite,
+    };
+    let written = export_regions(&image, &args.input, &regions, &args.output, &settings)?;
+    for file in &written {
         eprintln!(
             "wrote {} ({}x{})",
-            path.display(),
-            crop.width(),
-            crop.height()
+            file.path.display(),
+            file.width,
+            file.height
         );
-        written += 1;
+    }
+    if written.len() < regions.len() {
+        eprintln!(
+            "{} box{} fell outside the scan and was skipped",
+            regions.len() - written.len(),
+            if regions.len() - written.len() == 1 {
+                ""
+            } else {
+                "es"
+            }
+        );
     }
     eprintln!(
-        "{written} image{} written to {}",
-        if written == 1 { "" } else { "s" },
+        "{} image{} written to {}",
+        written.len(),
+        if written.len() == 1 { "" } else { "s" },
         args.output.display()
     );
     Ok(())
 }
 
-/// The scan itself is never modified.
-fn refuse_to_overwrite_source(target: &Path, source: &Path) -> Result<()> {
-    if let (Ok(a), Ok(b)) = (target.canonicalize(), source.canonicalize())
-        && a == b
-    {
-        bail!("refusing to overwrite the source scan {}", source.display());
+/// Output format as typed on the command line.
+#[derive(Clone, Copy, ValueEnum)]
+enum Format {
+    /// Keep the scan's own format.
+    Same,
+    Jpg,
+    Png,
+    Tiff,
+}
+
+impl From<Format> for OutputFormat {
+    fn from(format: Format) -> Self {
+        match format {
+            Format::Same => OutputFormat::Same,
+            Format::Jpg => OutputFormat::Jpg,
+            Format::Png => OutputFormat::Png,
+            Format::Tiff => OutputFormat::Tiff,
+        }
     }
-    Ok(())
 }
