@@ -90,3 +90,24 @@ Reproduce with `oxicut detect <scan> --inset 0` and the manifest's rectangles.
 | | F1@0.50 / F1@0.85 | 84.8% / 43.3% | 85.7% / 43.8% |
 
 The small gaps (and a few points of tightness) are JPEG-decoder differences on hard images. The target to beat is v7: ScanSplitter reports 88.8% box quality on the robust holdout.
+
+## v7: inner-edge tightening ("v7-lite")
+
+ScanSplitter's v7 starts from v5 anchors (MobileSAM, texture and frame passes), adds alternative proposals (v3 with a capped threshold, b* chroma), moves every proposal onto the photograph's edge, scores them, arbitrates and drops "ghost" prints. The tightening, scoring and arbitration do not need the model, so they are ported first as **v7-lite** (v3 proposals standing in for the v5 anchors).
+
+Ported and checked against Python (`tools/dump_v7_reference.py`, `benchmarks/golden/v7.json`):
+
+- `pil.rs`: Pillow's `convert("L")` and antialiased `BILINEAR` resize (22-bit fixed point), bit-identical on real and random images and at up- and down-scaling.
+- `tighten.rs`: `_deskew_patch`, `_side_step` (box blurs, plateau-and-step votes, Theil-Sen line) and `_tighten_rect`, with numpy's float32/float64 behaviour kept. **All 313 fixture rectangles match Python exactly (0.000 px)**, 114 of them moved by tightening.
+- `detect::regions_from_rects`: the final padding, trim, orientation and reading-order step, now shared by v3 and v7-lite.
+
+Not ported yet: the capped-threshold v3 and chroma alternatives, candidate scoring and arbitration, ghost rejection, and the v5 anchors.
+
+Measured with `oxicut bench` at a 0 px trim (box quality / F1@0.85 / count accuracy):
+
+| Suite | v3 | v7-lite | ScanSplitter v7 (published) |
+|---|---:|---:|---:|
+| robust-dev | 75.4 / 63.5 / 63.8 | 77.1 / 69.6 / 63.8 | |
+| robust-holdout | 79.0 / 64.6 / 55.3 | 81.2 / 72.8 / 55.3 | 88.8 box quality |
+
+Tightening makes boxes tighter (tightness 85.2% to 88.2%) at unchanged coverage and lifts strict accuracy by about 7 points; it cannot change the number of prints, which is what the remaining stages are for. Also: v3 at a 0 px trim (79.0) already beats v3 at ScanSplitter's default of 10 px (73.0) on the holdout set, which is why OxiCut's default trim is 0.

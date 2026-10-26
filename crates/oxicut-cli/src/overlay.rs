@@ -12,6 +12,7 @@ const GREEN: Rgb<u8> = Rgb([40, 220, 60]);
 const YELLOW: Rgb<u8> = Rgb([255, 210, 0]);
 const CYAN: Rgb<u8> = Rgb([0, 210, 255]);
 const MAGENTA: Rgb<u8> = Rgb([255, 60, 220]);
+const BLUE: Rgb<u8> = Rgb([80, 140, 255]);
 
 /// Longest side of the full-scan overlay; scans are far bigger than a screen.
 const OVERLAY_MAX_SIDE: u32 = 2400;
@@ -96,6 +97,9 @@ pub fn write_debug_images(dir: &Path, source: &RgbImage, detection: &Detection) 
     for rect in &stages.refined {
         outline(&mut staged, rect, 1.0, GREEN, 2);
     }
+    for rect in &stages.tightened {
+        outline(&mut staged, rect, 1.0, BLUE, 2);
+    }
     staged.save(dir.join("stages.png"))?;
 
     mask_image(&stages.foreground_mask).save(dir.join("foreground.png"))?;
@@ -112,7 +116,7 @@ pub fn write_debug_images(dir: &Path, source: &RgbImage, detection: &Detection) 
         "split": rects(&stages.split),
         "snapped": rects(&stages.snapped),
         "refined": rects(&stages.refined),
-        "legend": "stages.png: yellow candidates, cyan after split, magenta angle-snapped, green refined",
+        "legend": "stages.png: yellow candidates, cyan after split, magenta angle-snapped, green refined, blue tightened (v7-lite)",
     });
     std::fs::write(
         dir.join("stages.json"),

@@ -74,6 +74,8 @@ pub struct Stages {
     pub split: Vec<RotatedRect>,
     pub snapped: Vec<RotatedRect>,
     pub refined: Vec<RotatedRect>,
+    /// After v7's inner-edge tightening (empty for plain v3).
+    pub tightened: Vec<RotatedRect>,
 }
 
 pub struct Detection {
@@ -81,9 +83,58 @@ pub struct Detection {
     pub stages: Stages,
 }
 
+/// Turn rectangles in full-resolution pixels into regions: drop those outside
+/// the area limits, apply the trim/padding, keep `w >= h`, and order them as
+/// one reads the page (rows of about 100 px, left to right). Shared by every
+/// detector; this is `_v5_regions_from_rectangles` and the end of `detect_photos_v3`.
+pub fn regions_from_rects(
+    rects: &[RotatedRect],
+    original_width: u32,
+    original_height: u32,
+    options: &DetectOptions,
+) -> Vec<Region> {
+    let original_area = original_width as f64 * original_height as f64;
+    let net_adjust = (options.padding - options.inset) as i64;
+    let mut regions: Vec<Region> = rects
+        .iter()
+        .filter_map(|rect| {
+            let rect = *rect;
+            let area = rect.w * rect.h;
+            let area_ratio = area / original_area;
+            if !(options.min_area_ratio..=options.max_area_ratio).contains(&area_ratio) {
+                return None;
+            }
+
+            let (bx, by, box_width, box_height) = rect.bounding_rect();
+            let x = (bx - net_adjust).max(0);
+            let y = (by - net_adjust).max(0);
+            let bbox_width = (original_width as i64 - x)
+                .min(box_width + 2 * net_adjust)
+                .max(1);
+            let bbox_height = (original_height as i64 - y)
+                .min(box_height + 2 * net_adjust)
+                .max(1);
+
+            let mut padded_width = (rect.w + 2.0 * net_adjust as f64).max(1.0);
+            let mut padded_height = (rect.h + 2.0 * net_adjust as f64).max(1.0);
+            let mut angle = rect.angle;
+            if rect.w < rect.h {
+                std::mem::swap(&mut padded_width, &mut padded_height);
+                angle += 90.0;
+            }
+            Some(Region {
+                rect: RotatedRect::new(rect.cx, rect.cy, padded_width, padded_height, angle),
+                area,
+                area_ratio,
+                bbox: (x, y, bbox_width, bbox_height),
+            })
+        })
+        .collect();
+    regions.sort_by_key(|r| (r.bbox.1.div_euclid(100), r.bbox.0));
+    regions
+}
 pub fn detect_v3(source: &RgbImage, options: &DetectOptions) -> Detection {
     let (original_width, original_height) = source.dimensions();
-    let original_area = original_width as f64 * original_height as f64;
     let working = for_detection(source, options.detection_max_dimension);
     let scale = working.scale;
     let small = &working.image;
@@ -116,45 +167,8 @@ pub fn detect_v3(source: &RgbImage, options: &DetectOptions) -> Detection {
         .map(|rect| refine_rect_to_edges(gray.as_raw(), gw, gh, rect, 0.12))
         .collect();
 
-    let net_adjust = (options.padding - options.inset) as i64;
-    let mut regions: Vec<Region> = refined
-        .iter()
-        .filter_map(|small_rect| {
-            let rect = small_rect.scaled(1.0 / scale);
-            let area = rect.w * rect.h;
-            let area_ratio = area / original_area;
-            if !(options.min_area_ratio..=options.max_area_ratio).contains(&area_ratio) {
-                return None;
-            }
-
-            let (bx, by, box_width, box_height) = rect.bounding_rect();
-            let x = (bx - net_adjust).max(0);
-            let y = (by - net_adjust).max(0);
-            let bbox_width = (original_width as i64 - x)
-                .min(box_width + 2 * net_adjust)
-                .max(1);
-            let bbox_height = (original_height as i64 - y)
-                .min(box_height + 2 * net_adjust)
-                .max(1);
-
-            let mut padded_width = (rect.w + 2.0 * net_adjust as f64).max(1.0);
-            let mut padded_height = (rect.h + 2.0 * net_adjust as f64).max(1.0);
-            let mut angle = rect.angle;
-            if rect.w < rect.h {
-                std::mem::swap(&mut padded_width, &mut padded_height);
-                angle += 90.0;
-            }
-            Some(Region {
-                rect: RotatedRect::new(rect.cx, rect.cy, padded_width, padded_height, angle),
-                area,
-                area_ratio,
-                bbox: (x, y, bbox_width, bbox_height),
-            })
-        })
-        .collect();
-    // Reading order: rows of about 100 px, left to right.
-    regions.sort_by_key(|r| (r.bbox.1.div_euclid(100), r.bbox.0));
-
+    let full_size: Vec<RotatedRect> = refined.iter().map(|r| r.scaled(1.0 / scale)).collect();
+    let regions = regions_from_rects(&full_size, original_width, original_height, options);
     Detection {
         regions,
         stages: Stages {
@@ -175,6 +189,7 @@ pub fn detect_v3(source: &RgbImage, options: &DetectOptions) -> Detection {
             split,
             snapped,
             refined,
+            tightened: Vec::new(),
         },
     }
 }

@@ -20,10 +20,13 @@ pub mod io;
 pub mod kmeans;
 pub mod mask;
 pub mod merge;
+pub mod pil;
 pub mod refine;
 pub mod resize;
 pub mod snap;
 pub mod split;
+pub mod tighten;
+pub mod v7;
 pub mod warp;
 
 pub use geometry::RotatedRect;

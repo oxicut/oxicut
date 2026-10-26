@@ -9,9 +9,10 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use oxicut_core::RotatedRect;
-use oxicut_core::detect::{DetectOptions, detect_v3};
+use oxicut_core::detect::{DetectOptions, Detection, detect_v3};
 use oxicut_core::export::{Collision, ExportSettings, OutputFormat, export_regions};
 use oxicut_core::io::{load_image, to_detection_rgb};
+use oxicut_core::v7::detect_v7_lite;
 
 use boxes::{BoxRegion, BoxesFile};
 
@@ -40,6 +41,18 @@ enum Command {
 enum Mode {
     /// Model-free, background-aware detector (a port of ScanSplitter v3).
     V3,
+    /// v3 plus v7's inner-edge tightening: boxes move off white borders and shadows.
+    V7Lite,
+}
+
+impl Mode {
+    /// Name written to `boxes.json`.
+    fn name(self) -> &'static str {
+        match self {
+            Mode::V3 => "v3",
+            Mode::V7Lite => "v7-lite",
+        }
+    }
 }
 
 #[derive(Args)]
@@ -130,23 +143,26 @@ fn main() -> Result<()> {
     }
 }
 
-/// Run `mode` on a scan and return its boxes (the one place detectors are chosen).
-fn run_detector(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Vec<RotatedRect> {
+/// Run `mode` on a scan (the one place detectors are chosen).
+fn run_detection(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Detection {
     match mode {
-        Mode::V3 => detect_v3(rgb, options)
-            .regions
-            .into_iter()
-            .map(|r| r.rect)
-            .collect(),
+        Mode::V3 => detect_v3(rgb, options),
+        Mode::V7Lite => detect_v7_lite(rgb, options),
     }
 }
 
+/// Just the boxes.
+fn run_detector(mode: Mode, rgb: &image::RgbImage, options: &DetectOptions) -> Vec<RotatedRect> {
+    run_detection(mode, rgb, options)
+        .regions
+        .into_iter()
+        .map(|r| r.rect)
+        .collect()
+}
 fn detect(args: DetectArgs) -> Result<()> {
     if !(0.0..=100.0).contains(&args.min_area) || !(0.0..=100.0).contains(&args.max_area) {
         bail!("--min-area and --max-area are percentages between 0 and 100");
     }
-    let Mode::V3 = args.mode;
-
     let image =
         load_image(&args.input).with_context(|| format!("reading {}", args.input.display()))?;
     let source = to_detection_rgb(&image);
@@ -157,7 +173,7 @@ fn detect(args: DetectArgs) -> Result<()> {
         inset: args.inset,
         ..Default::default()
     };
-    let detection = detect_v3(&source, &options);
+    let detection = run_detection(args.mode, &source, &options);
 
     let file = BoxesFile {
         version: 1,
@@ -168,7 +184,7 @@ fn detect(args: DetectArgs) -> Result<()> {
             .unwrap_or_default(),
         width: source.width(),
         height: source.height(),
-        mode: "v3".into(),
+        mode: args.mode.name().into(),
         regions: detection
             .regions
             .iter()

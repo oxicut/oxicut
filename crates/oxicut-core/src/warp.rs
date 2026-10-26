@@ -116,9 +116,51 @@ pub fn warp_linear_replicate(
     }
     dst
 }
+/// `INTER_LINEAR` with `BORDER_REPLICATE` on a single-channel `f32` image: the
+/// same blend as [`warp_linear_replicate`] without the rounding to 8 bits.
+pub fn warp_linear_replicate_f32(
+    src: &[f32],
+    src_width: usize,
+    src_height: usize,
+    matrix: &Affine,
+    dst_width: usize,
+    dst_height: usize,
+) -> Vec<f32> {
+    let clamp_x = |x: i64| x.clamp(0, src_width as i64 - 1) as usize;
+    let clamp_y = |y: i64| y.clamp(0, src_height as i64 - 1) as usize;
+    let at = |y: usize, x: usize| src[y * src_width + x];
+
+    let mut dst = vec![0f32; dst_width * dst_height];
+    for y in 0..dst_height {
+        for x in 0..dst_width {
+            let sx = matrix[0][0] * x as f64 + matrix[0][1] * y as f64 + matrix[0][2];
+            let sy = matrix[1][0] * x as f64 + matrix[1][1] * y as f64 + matrix[1][2];
+            let (x0, y0) = (sx.floor(), sy.floor());
+            let (fx, fy) = ((sx - x0) as f32, (sy - y0) as f32);
+            let (x0, y0) = (x0 as i64, y0 as i64);
+            let (xa, xb) = (clamp_x(x0), clamp_x(x0 + 1));
+            let (ya, yb) = (clamp_y(y0), clamp_y(y0 + 1));
+            let (a, b, c, d) = (at(ya, xa), at(ya, xb), at(yb, xa), at(yb, xb));
+            dst[y * dst_width + x] =
+                (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (c * (1.0 - fx) + d * fx) * fy;
+        }
+    }
+    dst
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn float_warp_interpolates_without_rounding() {
+        let src: Vec<f32> = vec![0.0, 100.0, 200.0];
+        let quarter = [[1.0, 0.0, 0.25], [0.0, 1.0, 0.0]];
+        assert_eq!(
+            warp_linear_replicate_f32(&src, 3, 1, &quarter, 3, 1),
+            vec![25.0, 125.0, 200.0]
+        );
+    }
 
     #[test]
     fn linear_identity_and_integer_shift_are_exact() {
