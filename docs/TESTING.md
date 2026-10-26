@@ -1,6 +1,6 @@
 # Trying OxiCut by hand
 
-This is the first version you can use on real scans. It finds prints with the **v7-lite detector** by default (ScanSplitter's v3 plus v7's edge tightening), or with the full **v7 detector** once you download the MobileSAM models (Models tab, about 45 MB); plain v3 can also be chosen in the Detection tab, lets you correct the boxes, and exports the straightened crops. Your original scans are never changed.
+This is the first version you can use on real scans. It finds prints with the **v7-lite detector** by default (ScanSplitter's v3 plus v7's edge tightening), or with the full **v7 detector** once you download the MobileSAM models (Models tab, about 45 MB); plain v3 can also be chosen in the Detection tab. You can correct the boxes and export the straightened crops. Your original scans are never changed.
 
 ## Start it
 
