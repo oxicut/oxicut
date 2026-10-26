@@ -15,7 +15,9 @@ use oxcut_core::foreground::foreground;
 use oxcut_core::geometry::RotatedRect;
 use oxcut_core::io::{load_image, to_detection_rgb};
 use oxcut_core::mask::{Element, close, close_size, density_mask, density_window, open, open_size};
+use oxcut_core::merge::{deduplicate, merge_fragments};
 use oxcut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
+use oxcut_core::split::split_on_gutter;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -23,6 +25,8 @@ struct Golden {
     images: BTreeMap<String, GoldenImage>,
 }
 
+// snapped, efined and egions are read by the later-stage tests.
+#[allow(dead_code)]
 #[derive(Deserialize)]
 struct GoldenImage {
     detection_size: [u32; 2],
@@ -34,6 +38,12 @@ struct GoldenImage {
     mask_count: usize,
     contours: Vec<GoldenContour>,
     candidates: Vec<GoldenRect>,
+    merged: Vec<GoldenRect>,
+    deduplicated: Vec<GoldenRect>,
+    split: Vec<GoldenRect>,
+    snapped: Vec<GoldenRect>,
+    refined: Vec<GoldenRect>,
+    regions: Vec<GoldenRect>,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +63,10 @@ struct GoldenRect {
 }
 
 impl GoldenRect {
+    fn rect(self) -> RotatedRect {
+        RotatedRect::new(self.cx, self.cy, self.w, self.h, self.angle)
+    }
+
     fn canonical(self) -> RotatedRect {
         RotatedRect::new(self.cx, self.cy, self.w, self.h, self.angle).canonical()
     }
@@ -368,4 +382,108 @@ fn mask_contours_and_candidates_match_python() {
         "candidates exact on only {candidates_exact}"
     );
     assert!(worst_rect_gap < 0.05, "rectangle gap {worst_rect_gap}");
+}
+
+/// Match every expected rectangle to a distinct one of ours (order differs).
+/// Returns the worst gap among matches, or `None` when the sets cannot match.
+fn match_rects(ours: &[RotatedRect], theirs: &[GoldenRect], tolerance: f64) -> Option<f64> {
+    if ours.len() != theirs.len() {
+        return None;
+    }
+    let mut unused: Vec<RotatedRect> = ours.iter().map(|r| r.canonical()).collect();
+    let mut worst = 0f64;
+    for expected in theirs {
+        let expected = expected.canonical();
+        let (index, gap) = unused
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (i, rect_gap(*r, expected)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))?;
+        if gap >= tolerance {
+            return None;
+        }
+        worst = worst.max(gap);
+        unused.swap_remove(index);
+    }
+    Some(worst)
+}
+
+#[test]
+fn merge_and_dedupe_match_python() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut merge_exact, mut dedupe_exact, mut worst) = (0, 0, 0f64);
+    for (name, expected) in &golden.images {
+        // Each stage starts from Python's output of the previous stage.
+        let candidates: Vec<_> = expected.candidates.iter().map(|r| r.rect()).collect();
+        let max_area = 0.80 * (expected.detection_size[0] * expected.detection_size[1]) as f64;
+        let merged = merge_fragments(&candidates, max_area);
+        match match_rects(&merged, &expected.merged, 0.05) {
+            Some(gap) => {
+                merge_exact += 1;
+                worst = worst.max(gap);
+            }
+            None => println!(
+                "  {name}: merge differs ({} vs python {})",
+                merged.len(),
+                expected.merged.len()
+            ),
+        }
+
+        let merged_input: Vec<_> = expected.merged.iter().map(|r| r.rect()).collect();
+        let deduplicated = deduplicate(&merged_input);
+        match match_rects(&deduplicated, &expected.deduplicated, 0.05) {
+            Some(gap) => {
+                dedupe_exact += 1;
+                worst = worst.max(gap);
+            }
+            None => println!(
+                "  {name}: dedupe differs ({} vs python {})",
+                deduplicated.len(),
+                expected.deduplicated.len()
+            ),
+        }
+    }
+    let n = golden.images.len();
+    println!(
+        "{n} images: merge exact {merge_exact}, dedupe exact {dedupe_exact}, worst gap {worst:.4}"
+    );
+    assert_eq!(merge_exact, n, "merge differs from Python");
+    assert_eq!(dedupe_exact, n, "dedupe differs from Python");
+}
+
+#[test]
+fn gutter_split_matches_python() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut exact, mut worst) = (0, 0f64);
+    for (name, expected) in &golden.images {
+        let lab = rgb_to_lab(&detection_rgb(name));
+        let fg = foreground(&lab, &background_colors(&lab));
+        let minimum_area = 0.02 * (fg.width * fg.height) as f64;
+
+        let mut ours = Vec::new();
+        for rect in &expected.deduplicated {
+            ours.extend(split_on_gutter(&rect.rect(), &fg, minimum_area));
+        }
+        match match_rects(&ours, &expected.split, 0.05) {
+            Some(gap) => {
+                exact += 1;
+                worst = worst.max(gap);
+            }
+            None => println!(
+                "  {name}: split differs ({} vs python {})",
+                ours.len(),
+                expected.split.len()
+            ),
+        }
+    }
+    let n = golden.images.len();
+    println!("{n} images: split exact {exact}, worst gap {worst:.4}");
+    // Misses can only come from the few images whose foreground differs.
+    assert!(exact >= n - 3, "split exact on only {exact}");
 }

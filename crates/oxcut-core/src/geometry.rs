@@ -148,6 +148,73 @@ pub fn min_area_rect(points: &[(f64, f64)]) -> RotatedRect {
     best.expect("hull has edges").1
 }
 
+/// Signed area of a polygon (positive when counter-clockwise in a y-up frame).
+fn signed_area(polygon: &[(f64, f64)]) -> f64 {
+    let n = polygon.len();
+    (0..n)
+        .map(|i| {
+            let (a, b) = (polygon[i], polygon[(i + 1) % n]);
+            a.0 * b.1 - b.0 * a.1
+        })
+        .sum::<f64>()
+        / 2.0
+}
+
+/// Area of the intersection of two rotated rectangles
+/// (`cv2.rotatedRectangleIntersection` followed by `contourArea`).
+/// Sutherland-Hodgman: clip one convex polygon by each edge of the other.
+pub fn intersection_area(a: &RotatedRect, b: &RotatedRect) -> f64 {
+    if a.area() <= 0.0 || b.area() <= 0.0 {
+        return 0.0;
+    }
+    let mut subject = a.corners().to_vec();
+    let clip = b.corners();
+    // Keep the side of each clip edge that the clip polygon's interior is on.
+    let side = signed_area(&clip).signum();
+    for i in 0..4 {
+        let (p, q) = (clip[i], clip[(i + 1) % 4]);
+        let inside = |pt: (f64, f64)| {
+            side * ((q.0 - p.0) * (pt.1 - p.1) - (q.1 - p.1) * (pt.0 - p.0)) >= 0.0
+        };
+        let crossing = |s: (f64, f64), e: (f64, f64)| {
+            let (d1, d2) = (
+                (q.0 - p.0) * (s.1 - p.1) - (q.1 - p.1) * (s.0 - p.0),
+                (q.0 - p.0) * (e.1 - p.1) - (q.1 - p.1) * (e.0 - p.0),
+            );
+            let t = d1 / (d1 - d2);
+            (s.0 + t * (e.0 - s.0), s.1 + t * (e.1 - s.1))
+        };
+        let input = std::mem::take(&mut subject);
+        for j in 0..input.len() {
+            let (start, end) = (input[j], input[(j + 1) % input.len()]);
+            match (inside(start), inside(end)) {
+                (true, true) => subject.push(end),
+                (true, false) => subject.push(crossing(start, end)),
+                (false, true) => {
+                    subject.push(crossing(start, end));
+                    subject.push(end);
+                }
+                (false, false) => {}
+            }
+        }
+        if subject.is_empty() {
+            return 0.0;
+        }
+    }
+    signed_area(&subject).abs()
+}
+
+/// Intersection over the smaller rectangle's area (`_v3_overlap_fraction`).
+pub fn overlap_fraction(a: &RotatedRect, b: &RotatedRect) -> f64 {
+    intersection_area(a, b) / a.area().min(b.area()).max(1.0)
+}
+
+/// Intersection over union (`_v3_iou`).
+pub fn iou(a: &RotatedRect, b: &RotatedRect) -> f64 {
+    let intersection = intersection_area(a, b);
+    intersection / (a.area() + b.area() - intersection).max(1.0)
+}
+
 impl RotatedRect {
     /// Same rectangle with `w >= h` and the angle in `[0, 180)`, so two
     /// descriptions of one rectangle compare equal.
@@ -229,6 +296,39 @@ mod tests {
         assert_eq!(min_area_rect(&[(3.0, 4.0)]).area(), 0.0);
         let line = min_area_rect(&[(0.0, 0.0), (6.0, 8.0)]);
         assert!((line.w - 10.0).abs() < 1e-9 && line.h == 0.0);
+    }
+
+    #[test]
+    fn intersection_of_axis_aligned_boxes() {
+        let a = RotatedRect::new(50.0, 50.0, 100.0, 100.0, 0.0);
+        let b = RotatedRect::new(100.0, 50.0, 100.0, 100.0, 0.0);
+        assert!((intersection_area(&a, &b) - 5000.0).abs() < 1e-6);
+        assert!((overlap_fraction(&a, &b) - 0.5).abs() < 1e-9);
+        assert!((iou(&a, &b) - 5000.0 / 15000.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn intersection_edge_cases() {
+        let a = RotatedRect::new(0.0, 0.0, 10.0, 10.0, 0.0);
+        let far = RotatedRect::new(100.0, 0.0, 10.0, 10.0, 0.0);
+        assert_eq!(intersection_area(&a, &far), 0.0);
+        let inside = RotatedRect::new(0.0, 0.0, 4.0, 4.0, 30.0);
+        assert!((intersection_area(&a, &inside) - 16.0).abs() < 1e-6);
+        assert!((intersection_area(&inside, &a) - 16.0).abs() < 1e-6);
+        assert!((intersection_area(&a, &a) - 100.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rotated_square_over_square_is_an_octagon() {
+        let a = RotatedRect::new(0.0, 0.0, 10.0, 10.0, 0.0);
+        let b = RotatedRect::new(0.0, 0.0, 10.0, 10.0, 45.0);
+        // Regular octagon inscribed in both: 2(sqrt2 - 1) * 10^2 * ... computed directly.
+        let expected = 2.0 * (2.0_f64.sqrt() - 1.0) * 100.0 / 1.0 * 1.0;
+        assert!(
+            (intersection_area(&a, &b) - expected).abs() < 1e-6,
+            "{}",
+            intersection_area(&a, &b)
+        );
     }
 
     #[test]

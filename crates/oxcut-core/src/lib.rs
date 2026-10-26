@@ -11,6 +11,9 @@ pub mod geometry;
 pub mod io;
 pub mod kmeans;
 pub mod mask;
+pub mod merge;
 pub mod resize;
+pub mod split;
+pub mod warp;
 
 pub use geometry::RotatedRect;

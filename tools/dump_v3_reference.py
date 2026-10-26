@@ -70,6 +70,7 @@ def stages(image: Image.Image) -> dict:
     minimum_area, maximum_area = 0.02 * total_area, 0.80 * total_area
     contour_rects = []
     candidates = []
+    candidate_tuples = []
     for contour in contours:
         rect = cv2.minAreaRect(contour)
         rect_width, rect_height = rect[1]
@@ -86,7 +87,27 @@ def stages(image: Image.Image) -> dict:
         if component_fill < 0.32 or aspect > 5.0:
             continue
         candidates.append(rect_json(rect))
+        candidate_tuples.append(rect)
+
+    # Remaining v3 stages, each recorded so the port can be checked in turn.
+    merged = d._v3_merge_fragments(candidate_tuples, maximum_area)
+    deduplicated = []
+    for rect in sorted(merged, key=lambda item: item[1][0] * item[1][1], reverse=True):
+        if any(d._v3_iou(rect, other) > 0.55 for other in deduplicated):
+            continue
+        deduplicated.append(rect)
+    split = []
+    for rect in deduplicated:
+        split.extend(d._v3_split_on_gutter(rect, foreground, minimum_area))
+    gray = cv2.cvtColor(small, cv2.COLOR_RGB2GRAY)
+    snapped = [d._v3_snap_angle_to_long_edges(gray, rect) for rect in split]
+    refined = [d._refine_rect_to_edges(gray, rect, search_margin_ratio=0.12) for rect in snapped]
     return {
+        "merged": [rect_json(r) for r in merged],
+        "deduplicated": [rect_json(r) for r in deduplicated],
+        "split": [rect_json(r) for r in split],
+        "snapped": [rect_json(r) for r in snapped],
+        "refined": [rect_json(r) for r in refined],
         "density_window": density_window,
         "open_size": open_size,
         "close_size": close_size,

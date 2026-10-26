@@ -60,12 +60,12 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 - [x] Port v3 **background model**: platen/paper colour in Lab sampled from the scan border. _(`color.rs`, `kmeans.rs`, `background.rs`; reproduces Python's clusters exactly on 111 of 114 fixtures, see port notes. Golden data: `benchmarks/golden/v3.json` from `tools/dump_v3_reference.py`.)_
 - [x] Port v3 **foreground mask**: Lab distance to the background clusters, Otsu threshold with the 18 floor. _(`foreground.rs`; Otsu equal on all 114 fixtures, pixel counts exact on 106.)_
 - [x] Port v3 **dense non-background region** detection: density filter, open/close morphology, contours, `minAreaRect`, area/fill/aspect filters. _(`mask.rs`, `contours.rs`, `candidates.rs`; candidates identical to Python on 112 of 114 fixtures, see port notes.)_
-- [ ] Port v3 **fragment merge and dedupe** (needs rotated-rectangle intersection).
-- [ ] Port v3 **gutter split** for touching prints.
+- [x] Port v3 **fragment merge and dedupe**. _(merge.rs, rotated-rectangle intersection in geometry.rs; identical to Python on all 114 fixtures.)_
+- [x] Port v3 **gutter split** for touching prints.
 - [ ] Port v3 **edge snap** of box sides to long physical edges.
 - [ ] `oxcut detect` with `--mode v3` and `--debug` (per-stage overlays + JSON).
 - [ ] Crop: rotate full-res around box centre, axis-aligned crop, optional inset px, preserve bit depth. `oxcut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`.
-- [ ] **Done when:** v3 boxes within Ã‚Â±2 px / Ã‚Â±0.5Ã‚Â° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap.
+- [ ] **Done when:** v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap.
 - [ ] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 2: Model registry, MobileSAM via `ort`, v5, v7, benchmark
@@ -97,7 +97,7 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 ## Phase 4: Review mode (marquee editor)
 
 - [ ] Per-scan Vue view: scan on a Fabric.js canvas, one rotatable/resizable rect per box.
-- [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0Ã‚Â° with a modifier key, zoom/pan.
+- [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0° with a modifier key, zoom/pan.
 - [ ] Keyboard: Enter = approve & advance, arrows = move through queue, Delete = remove box.
 - [ ] Flags (warnings): no item found, box touches scan edge, unusual aspect ratio/size, overlapping boxes. Auto-approve unflagged scans.
 - [ ] **Done when:** a scan can be fully corrected by mouse + keyboard without touching settings.
