@@ -16,6 +16,7 @@ use oxcut_core::geometry::RotatedRect;
 use oxcut_core::io::{load_image, to_detection_rgb};
 use oxcut_core::mask::{Element, close, close_size, density_mask, density_window, open, open_size};
 use oxcut_core::merge::{deduplicate, merge_fragments};
+use oxcut_core::refine::refine_rect_to_edges;
 use oxcut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
 use oxcut_core::snap::snap_angle_to_long_edges;
 use oxcut_core::split::split_on_gutter;
@@ -523,4 +524,38 @@ fn angle_snap_matches_python() {
         println!("  {problem}");
     }
     assert_eq!(exact, rects, "angle snap differs from Python");
+}
+
+#[test]
+fn edge_refinement_matches_python() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut rects, mut exact, mut moved, mut worst) = (0, 0, 0, 0f64);
+    let mut problems = Vec::new();
+    for (name, expected) in &golden.images {
+        let gray = rgb_to_gray(&detection_rgb(name));
+        let (w, h) = (gray.width() as usize, gray.height() as usize);
+        for (index, (input, want)) in expected.snapped.iter().zip(&expected.refined).enumerate() {
+            let ours = refine_rect_to_edges(gray.as_raw(), w, h, &input.rect(), 0.12);
+            let gap = rect_gap(ours, want.rect());
+            rects += 1;
+            moved += (rect_gap(input.rect(), want.rect()) > 1e-6) as usize;
+            worst = worst.max(gap);
+            if gap < 0.05 {
+                exact += 1;
+            } else {
+                problems.push(format!(
+                    "{name}#{index}: ours ({:.2},{:.2}) {:.2}x{:.2} vs python ({:.2},{:.2}) {:.2}x{:.2}",
+                    ours.cx, ours.cy, ours.w, ours.h, want.cx, want.cy, want.w, want.h
+                ));
+            }
+        }
+    }
+    println!("{rects} rectangles ({moved} moved by Python): exact {exact}, worst gap {worst:.4}");
+    for problem in problems.iter().take(20) {
+        println!("  {problem}");
+    }
+    assert_eq!(exact, rects, "edge refinement differs from Python");
 }

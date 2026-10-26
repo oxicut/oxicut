@@ -3,7 +3,7 @@
 
 use crate::foreground::Foreground;
 use crate::geometry::RotatedRect;
-use crate::warp::{Affine, warp_nearest};
+use crate::warp::{patch_matrix, warp_nearest};
 
 /// Rectangles at least this elongated can hold two prints side by side.
 const MIN_SPLIT_ASPECT: f64 = 1.8;
@@ -14,33 +14,6 @@ const MIN_FLANK_DENSITY: f64 = 0.16;
 
 fn py_round(x: f64) -> usize {
     x.round_ties_even() as usize
-}
-
-/// The inverse-map matrix OpenCV receives: it is built in double, stored as
-/// `float32`, and read back as double.
-fn patch_matrix(
-    rect: &RotatedRect,
-    patch_width: usize,
-    patch_height: usize,
-) -> (Affine, [(f64, f64); 2]) {
-    let theta = rect.angle.to_radians();
-    let width_axis = (theta.cos(), theta.sin());
-    let height_axis = (-theta.sin(), theta.cos());
-    let (pw, ph) = (patch_width as f64, patch_height as f64);
-    let f = |v: f64| v as f32 as f64;
-    let matrix = [
-        [
-            f(width_axis.0),
-            f(height_axis.0),
-            f(rect.cx - width_axis.0 * pw / 2.0 - height_axis.0 * ph / 2.0),
-        ],
-        [
-            f(width_axis.1),
-            f(height_axis.1),
-            f(rect.cy - width_axis.1 * pw / 2.0 - height_axis.1 * ph / 2.0),
-        ],
-    ];
-    (matrix, [width_axis, height_axis])
 }
 
 /// `cv2.blur(row, (7, 1))` on a float32 row: normalised box filter, border

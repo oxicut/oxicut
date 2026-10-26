@@ -49,9 +49,102 @@ pub fn warp_nearest(
     dst
 }
 
+use crate::geometry::RotatedRect;
+
+/// The inverse-map matrix OpenCV receives: it is built in double, stored as
+/// `float32`, and read back as double.
+pub fn patch_matrix(
+    rect: &RotatedRect,
+    patch_width: usize,
+    patch_height: usize,
+) -> (Affine, [(f64, f64); 2]) {
+    let theta = rect.angle.to_radians();
+    let width_axis = (theta.cos(), theta.sin());
+    let height_axis = (-theta.sin(), theta.cos());
+    let (pw, ph) = (patch_width as f64, patch_height as f64);
+    let f = |v: f64| v as f32 as f64;
+    let matrix = [
+        [
+            f(width_axis.0),
+            f(height_axis.0),
+            f(rect.cx - width_axis.0 * pw / 2.0 - height_axis.0 * ph / 2.0),
+        ],
+        [
+            f(width_axis.1),
+            f(height_axis.1),
+            f(rect.cy - width_axis.1 * pw / 2.0 - height_axis.1 * ph / 2.0),
+        ],
+    ];
+    (matrix, [width_axis, height_axis])
+}
+
+/// Single-channel `INTER_LINEAR` with `BORDER_REPLICATE`, 8-bit.
+///
+/// Unlike nearest-neighbour, OpenCV 5 evaluates this in floating point: the
+/// source coordinate in double (from the `float32` matrix), the blend in single
+/// precision, the result rounded half to even. Probed against cv2 on rotated
+/// transforms this agrees on all but about 0.016% of pixels (the residue is
+/// likely fused multiply-add in OpenCV's vector code); a 1/32 or even 15-bit
+/// fixed-point model disagrees on several percent.
+pub fn warp_linear_replicate(
+    src: &[u8],
+    src_width: usize,
+    src_height: usize,
+    matrix: &Affine,
+    dst_width: usize,
+    dst_height: usize,
+) -> Vec<u8> {
+    let clamp_x = |x: i64| x.clamp(0, src_width as i64 - 1) as usize;
+    let clamp_y = |y: i64| y.clamp(0, src_height as i64 - 1) as usize;
+    let at = |y: usize, x: usize| src[y * src_width + x] as f32;
+
+    let mut dst = vec![0u8; dst_width * dst_height];
+    for y in 0..dst_height {
+        for x in 0..dst_width {
+            let sx = matrix[0][0] * x as f64 + matrix[0][1] * y as f64 + matrix[0][2];
+            let sy = matrix[1][0] * x as f64 + matrix[1][1] * y as f64 + matrix[1][2];
+            let (x0, y0) = (sx.floor(), sy.floor());
+            let (fx, fy) = ((sx - x0) as f32, (sy - y0) as f32);
+            let (x0, y0) = (x0 as i64, y0 as i64);
+
+            let (xa, xb) = (clamp_x(x0), clamp_x(x0 + 1));
+            let (ya, yb) = (clamp_y(y0), clamp_y(y0 + 1));
+            let (a, b, c, d) = (at(ya, xa), at(ya, xb), at(yb, xa), at(yb, xb));
+            let value = (a * (1.0 - fx) + b * fx) * (1.0 - fy) + (c * (1.0 - fx) + d * fx) * fy;
+            dst[y * dst_width + x] = value.round_ties_even().clamp(0.0, 255.0) as u8;
+        }
+    }
+    dst
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linear_identity_and_integer_shift_are_exact() {
+        let src: Vec<u8> = (0..20).map(|v| v * 10).collect(); // 5 x 4
+        let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        assert_eq!(warp_linear_replicate(&src, 5, 4, &identity, 5, 4), src);
+        let shift = [[1.0, 0.0, 1.0], [0.0, 1.0, 0.0]];
+        let shifted = warp_linear_replicate(&src, 5, 4, &shift, 5, 4);
+        // Last column reads past the edge: replicated.
+        assert_eq!(&shifted[0..5], &[10, 20, 30, 40, 40]);
+    }
+
+    #[test]
+    fn linear_half_pixel_averages_neighbours() {
+        let src: Vec<u8> = vec![0, 100, 200];
+        let half = [[1.0, 0.0, 0.5], [0.0, 1.0, 0.0]];
+        let out = warp_linear_replicate(&src, 3, 1, &half, 3, 1);
+        assert_eq!(out, vec![50, 150, 200]);
+    }
+
+    #[test]
+    fn linear_replicates_borders_for_far_outside_samples() {
+        let src: Vec<u8> = vec![7, 9];
+        let far = [[1.0, 0.0, -50.0], [0.0, 1.0, 30.0]];
+        assert_eq!(warp_linear_replicate(&src, 2, 1, &far, 2, 1), vec![7, 7]);
+    }
 
     #[test]
     fn identity_copies_the_image() {

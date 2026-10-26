@@ -48,6 +48,57 @@ pub fn gaussian_blur_5x5(src: &[u8], width: usize, height: usize) -> Vec<u8> {
     out
 }
 
+/// `cv2.GaussianBlur(src, (3, 3), 0)` on 8-bit data: kernel `[1 2 1] / 4` in
+/// each direction, so `(sum of 16ths + 8) >> 4`.
+pub fn gaussian_blur_3x3(src: &[u8], width: usize, height: usize) -> Vec<u8> {
+    const KERNEL: [u32; 3] = [1, 2, 1];
+    let mut horizontal = vec![0u32; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            horizontal[y * width + x] = KERNEL
+                .iter()
+                .enumerate()
+                .map(|(k, &weight)| {
+                    weight * src[y * width + reflect101(x as isize + k as isize - 1, width)] as u32
+                })
+                .sum();
+        }
+    }
+    let mut out = vec![0u8; width * height];
+    for y in 0..height {
+        for x in 0..width {
+            let sum: u32 = KERNEL
+                .iter()
+                .enumerate()
+                .map(|(k, &weight)| {
+                    weight * horizontal[reflect101(y as isize + k as isize - 1, height) * width + x]
+                })
+                .sum();
+            out[y * width + x] = ((sum + 8) >> 4) as u8;
+        }
+    }
+    out
+}
+
+/// `|Sobel|` derivatives with `BORDER_REFLECT_101` (OpenCV's default), as
+/// `(|d/dx|, |d/dy|)`.
+pub fn sobel3_reflect101_abs(src: &[u8], width: usize, height: usize) -> (Vec<u16>, Vec<u16>) {
+    let at = |x: isize, y: isize| src[reflect101(y, height) * width + reflect101(x, width)] as i32;
+    let mut dx = vec![0u16; width * height];
+    let mut dy = vec![0u16; width * height];
+    for y in 0..height as isize {
+        for x in 0..width as isize {
+            let gx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1))
+                - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+            let gy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1))
+                - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+            dx[y as usize * width + x as usize] = gx.unsigned_abs() as u16;
+            dy[y as usize * width + x as usize] = gy.unsigned_abs() as u16;
+        }
+    }
+    (dx, dy)
+}
+
 /// 3x3 Sobel derivatives of 8-bit data with `BORDER_REPLICATE`, as
 /// `(d/dx, d/dy)`; each fits in `i16` like OpenCV's `CV_16S`.
 pub fn sobel3_replicate(src: &[u8], width: usize, height: usize) -> (Vec<i16>, Vec<i16>) {

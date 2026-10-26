@@ -15,6 +15,7 @@ pub mod io;
 pub mod kmeans;
 pub mod mask;
 pub mod merge;
+pub mod refine;
 pub mod resize;
 pub mod snap;
 pub mod split;
