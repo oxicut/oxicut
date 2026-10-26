@@ -39,6 +39,23 @@ impl RotatedRect {
         }
     }
 
+    /// The four corners computed in `f32` exactly like `cv::RotatedRect::points`,
+    /// for the places where a pixel boundary decides the result (a `floor` of a
+    /// corner that lies on an integer is only reproducible in single precision).
+    pub fn corners_f32(&self) -> [(f32, f32); 4] {
+        let (cx, cy, w, h) = (self.cx as f32, self.cy as f32, self.w as f32, self.h as f32);
+        let angle = self.angle as f32 as f64 * std::f64::consts::PI / 180.0;
+        let b = angle.cos() as f32 * 0.5;
+        let a = angle.sin() as f32 * 0.5;
+        // OpenCV 5 builds every corner from its own expression (older versions
+        // mirrored the first two through the centre), which rounds differently.
+        let p0 = (cx - a * h - b * w, cy + b * h - a * w);
+        let p1 = (cx + a * h - b * w, cy - b * h - a * w);
+        let p2 = (cx + a * h + b * w, cy - b * h + a * w);
+        let p3 = (cx - a * h + b * w, cy + b * h + a * w);
+        [p0, p1, p2, p3]
+    }
+
     /// The four corners, in the same order as OpenCV's `boxPoints`.
     pub fn corners(&self) -> [(f64, f64); 4] {
         let theta = self.angle.to_radians();

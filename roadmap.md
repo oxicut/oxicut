@@ -62,7 +62,8 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 - [x] Port v3 **dense non-background region** detection: density filter, open/close morphology, contours, `minAreaRect`, area/fill/aspect filters. _(`mask.rs`, `contours.rs`, `candidates.rs`; candidates identical to Python on 112 of 114 fixtures, see port notes.)_
 - [x] Port v3 **fragment merge and dedupe**. _(merge.rs, rotated-rectangle intersection in geometry.rs; identical to Python on all 114 fixtures.)_
 - [x] Port v3 **gutter split** for touching prints.
-- [ ] Port v3 **edge snap** of box sides to long physical edges.
+- [x] Port v3 **angle snap** to long physical edges (Gaussian, Canny, probabilistic Hough). _(Exact on all 320 fixture rectangles; see port notes.)_
+- [ ] Port v3 **side refinement** (_refine_rect_to_edges): move each side onto the strongest edge.
 - [ ] `oxcut detect` with `--mode v3` and `--debug` (per-stage overlays + JSON).
 - [ ] Crop: rotate full-res around box centre, axis-aligned crop, optional inset px, preserve bit depth. `oxcut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`.
 - [ ] **Done when:** v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap.

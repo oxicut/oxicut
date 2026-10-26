@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 use oxcut_core::background::background_colors;
 use oxcut_core::candidates::candidate_rects;
-use oxcut_core::color::rgb_to_lab;
+use oxcut_core::color::{rgb_to_gray, rgb_to_lab};
 use oxcut_core::contours::{contour_info, find_external_contours};
 use oxcut_core::foreground::foreground;
 use oxcut_core::geometry::RotatedRect;
@@ -17,6 +17,7 @@ use oxcut_core::io::{load_image, to_detection_rgb};
 use oxcut_core::mask::{Element, close, close_size, density_mask, density_window, open, open_size};
 use oxcut_core::merge::{deduplicate, merge_fragments};
 use oxcut_core::resize::{DETECTION_MAX_DIMENSION, for_detection};
+use oxcut_core::snap::snap_angle_to_long_edges;
 use oxcut_core::split::split_on_gutter;
 use serde::Deserialize;
 
@@ -486,4 +487,40 @@ fn gutter_split_matches_python() {
     println!("{n} images: split exact {exact}, worst gap {worst:.4}");
     // Misses can only come from the few images whose foreground differs.
     assert!(exact >= n - 3, "split exact on only {exact}");
+}
+
+#[test]
+fn angle_snap_matches_python() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut rects, mut exact, mut worst, mut changed) = (0, 0, 0f64, 0);
+    let mut problems = Vec::new();
+    for (name, expected) in &golden.images {
+        let gray = rgb_to_gray(&detection_rgb(name));
+        let (w, h) = (gray.width() as usize, gray.height() as usize);
+        for (index, (input, want)) in expected.split.iter().zip(&expected.snapped).enumerate() {
+            let ours = snap_angle_to_long_edges(gray.as_raw(), w, h, &input.rect());
+            let gap = (ours.angle - want.angle).abs();
+            rects += 1;
+            changed += ((want.angle - input.angle).abs() > 1e-9) as usize;
+            if gap < 0.01 {
+                exact += 1;
+            } else {
+                problems.push(format!(
+                    "{name}#{index}: angle {:.4} (input {:.4}) vs python {:.4}",
+                    ours.angle, input.angle, want.angle
+                ));
+            }
+            worst = worst.max(gap);
+        }
+    }
+    println!(
+        "{rects} rectangles ({changed} snapped by Python): angle exact {exact}, worst angle gap {worst:.4} deg"
+    );
+    for problem in problems.iter().take(25) {
+        println!("  {problem}");
+    }
+    assert_eq!(exact, rects, "angle snap differs from Python");
 }

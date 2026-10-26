@@ -4,15 +4,19 @@
 
 pub mod background;
 pub mod candidates;
+pub mod canny;
 pub mod color;
 pub mod contours;
+pub mod filter;
 pub mod foreground;
 pub mod geometry;
+pub mod hough;
 pub mod io;
 pub mod kmeans;
 pub mod mask;
 pub mod merge;
 pub mod resize;
+pub mod snap;
 pub mod split;
 pub mod warp;
 

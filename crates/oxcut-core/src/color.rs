@@ -133,13 +133,15 @@ pub fn rgb_to_lab(rgb: &RgbImage) -> LabImage {
     }
 }
 
-/// `cv2.cvtColor(..., COLOR_RGB2GRAY)` on 8-bit data: fixed-point BT.601.
+/// `cv2.cvtColor(..., COLOR_RGB2GRAY)` on 8-bit data: 15-bit fixed-point BT.601.
+/// These are OpenCV 5's weights (verified on all 2^24 colours against
+/// 5.0.0); OpenCV 4 used 14-bit 4899/9617/1868 and differs on 0.3% of colours.
 pub fn rgb_to_gray(rgb: &RgbImage) -> GrayImage {
     let (width, height) = rgb.dimensions();
     let data = rgb
         .pixels()
         .map(|p| {
-            ((p[0] as u32 * 4899 + p[1] as u32 * 9617 + p[2] as u32 * 1868 + 8192) >> 14) as u8
+            ((p[0] as u32 * 9798 + p[1] as u32 * 19235 + p[2] as u32 * 3735 + 16384) >> 15) as u8
         })
         .collect();
     GrayImage::from_raw(width, height, data).expect("same dimensions")
