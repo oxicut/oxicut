@@ -40,9 +40,9 @@ Resume from the checkboxes: the first unchecked `[ ]` item, read top to bottom, 
 
 Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotated rects: cx, cy, w, h, angle, in source px) and `debug.png` with boxes drawn.
 
-- [ ] `git init`; create the workspace `Cargo.toml` with `crates/oxcut-core`, `crates/oxcut-models`, `crates/oxcut-cli` (binary `oxcut`).
-- [ ] Add `LICENSE` (GPL-3.0), `README.md` with ScanSplitter attribution, `.gitignore` (`target/`, `reference/`, `app/node_modules/`).
-- [ ] Create `docs/PROGRESS.md` and `docs/detector-v7-port.md`.
+- [x] `git init`; create the workspace `Cargo.toml` with `crates/oxcut-core`, `crates/oxcut-models`, `crates/oxcut-cli` (binary `oxcut`). _(Edition 2024, GPL-3.0-or-later matching ScanSplitter; builds and is clippy clean.)_
+- [x] Add `LICENSE` (GPL-3.0), `README.md` with ScanSplitter attribution, `.gitignore` (`target/`, `reference/`, `app/node_modules/`).
+- [x] Create `docs/PROGRESS.md` and `docs/detector-v7-port.md`.
 - [ ] Read the reference detector spec and v3 source before writing code.
 - [ ] Image I/O: load JPEG, PNG, TIFF (8 and 16-bit) preserving bit depth.
 - [ ] Downsample for detection (~1500 px long side, confirm the exact value in the Python) and map boxes back to full resolution.

@@ -1,0 +1,15 @@
+[package]
+name = "oxcut-cli"
+description = "Command-line interface for Oxcut"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "oxcut"
+path = "src/main.rs"
+
+[dependencies]
+oxcut-core.workspace = true
+oxcut-models.workspace = true

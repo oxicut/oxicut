@@ -1,0 +1,9 @@
+[package]
+name = "oxcut-models"
+description = "Model registry, download/verify, and ONNX inference for Oxcut"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
