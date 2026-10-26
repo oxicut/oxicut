@@ -23,6 +23,7 @@ pub mod merge;
 pub mod pil;
 pub mod refine;
 pub mod resize;
+pub mod sam;
 pub mod snap;
 pub mod split;
 pub mod tighten;
