@@ -2,6 +2,7 @@
 
 mod bench;
 mod boxes;
+mod models;
 mod overlay;
 
 use std::path::PathBuf;
@@ -35,6 +36,9 @@ enum Command {
     Crop(CropArgs),
     /// Score a detector against ground-truth boxes (ScanSplitter's metrics).
     Bench(BenchCli),
+    /// Show, download and verify the model files.
+    #[command(subcommand)]
+    Models(models::ModelsCommand),
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -129,6 +133,7 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Command::Detect(args) => detect(args),
         Command::Crop(args) => crop(args),
+        Command::Models(command) => models::run(command),
         Command::Bench(args) => bench::run(bench::BenchArgs {
             manifest: args.manifest,
             suites: args.suites,

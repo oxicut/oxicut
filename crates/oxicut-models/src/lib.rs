@@ -44,7 +44,7 @@ pub static MOBILESAM_ENCODER: ModelSpec<'static> = ModelSpec {
         "https://huggingface.co/Acly/MobileSAM/resolve/0d3b403339b4674a82493d5e97964dd78089ddc8/mobile_sam_image_encoder.onnx",
     ],
     sha256: "580f5fb648ea1062c0aabc26217aed56921985f03f0cbbd852bba81d760cc749",
-    approx_bytes: 27_000_000,
+    approx_bytes: 28_157_093,
 };
 
 pub static MOBILESAM_DECODER: ModelSpec<'static> = ModelSpec {
@@ -55,7 +55,7 @@ pub static MOBILESAM_DECODER: ModelSpec<'static> = ModelSpec {
         "https://huggingface.co/Acly/MobileSAM/resolve/0d3b403339b4674a82493d5e97964dd78089ddc8/sam_mask_decoder_single.onnx",
     ],
     sha256: "93915fc7c993ab9d59ab8c9ccd3bce37f7509c81ab4150a74abd4d2abbd8570d",
-    approx_bytes: 16_000_000,
+    approx_bytes: 16_501_323,
 };
 
 /// Used by a later phase to tell which way is up; registered now so the
