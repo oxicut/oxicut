@@ -109,7 +109,8 @@ fn trace(grid: &Grid, start: Point) -> Vec<Point> {
     }
 }
 
-/// Outer contours, in raster order of each blob's first pixel.
+/// Outer contours. OpenCV lists them in *reverse* raster order of each blob's
+/// first pixel (bottom blobs first), and later stages depend on the order.
 pub fn find_external_contours(mask: &GrayImage) -> Vec<Vec<Point>> {
     let grid = Grid {
         width: mask.width() as i32,
@@ -146,6 +147,7 @@ pub fn find_external_contours(mask: &GrayImage) -> Vec<Vec<Point>> {
             }
         }
     }
+    contours.reverse();
     contours
 }
 

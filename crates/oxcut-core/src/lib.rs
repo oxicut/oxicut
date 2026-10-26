@@ -7,6 +7,8 @@ pub mod candidates;
 pub mod canny;
 pub mod color;
 pub mod contours;
+pub mod crop;
+pub mod detect;
 pub mod filter;
 pub mod foreground;
 pub mod geometry;

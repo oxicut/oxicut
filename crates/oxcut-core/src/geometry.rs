@@ -56,6 +56,30 @@ impl RotatedRect {
         [p0, p1, p2, p3]
     }
 
+    /// Tight integer bounding box `(x, y, width, height)` of the corners, as
+    /// `cv2.boundingRect(cv2.boxPoints(rect))`: single-precision corners, with
+    /// the far edge `floor`ed and included (hence the `+ 1`).
+    pub fn bounding_rect(&self) -> (i64, i64, i64, i64) {
+        let corners = self.corners_f32();
+        let min_x = corners.iter().map(|c| c.0).fold(f32::INFINITY, f32::min);
+        let max_x = corners
+            .iter()
+            .map(|c| c.0)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let min_y = corners.iter().map(|c| c.1).fold(f32::INFINITY, f32::min);
+        let max_y = corners
+            .iter()
+            .map(|c| c.1)
+            .fold(f32::NEG_INFINITY, f32::max);
+        let (x, y) = (min_x.floor() as i64, min_y.floor() as i64);
+        (
+            x,
+            y,
+            max_x.floor() as i64 - x + 1,
+            max_y.floor() as i64 - y + 1,
+        )
+    }
+
     /// The four corners, in the same order as OpenCV's `boxPoints`.
     pub fn corners(&self) -> [(f64, f64); 4] {
         let theta = self.angle.to_radians();
@@ -107,11 +131,15 @@ pub fn convex_hull(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
 }
 
 /// Minimum-area enclosing rotated rectangle (`cv2.minAreaRect`): one side lies
-/// along some hull edge, so try each edge and keep the smallest. `w` runs along
-/// the edge direction `angle`. OpenCV's choice of which side is `w` (and the
-/// 90 degree ambiguity of `angle`) differs by version; use [`RotatedRect::canonical`]
-/// to compare.
+/// along some hull edge, so try each edge and keep the smallest. The result is
+/// written the way OpenCV 5 writes it, see [`RotatedRect::opencv_normalized`],
+/// because later detector stages behave differently for equivalent
+/// descriptions of one rectangle.
 pub fn min_area_rect(points: &[(f64, f64)]) -> RotatedRect {
+    min_area_rect_raw(points).opencv_normalized()
+}
+
+fn min_area_rect_raw(points: &[(f64, f64)]) -> RotatedRect {
     let hull = convex_hull(points);
     match hull.len() {
         0 => return RotatedRect::new(0.0, 0.0, 0.0, 0.0, 0.0),
@@ -128,7 +156,6 @@ pub fn min_area_rect(points: &[(f64, f64)]) -> RotatedRect {
         }
         _ => {}
     }
-
     let mut best: Option<(f64, RotatedRect)> = None;
     for i in 0..hull.len() {
         let origin = hull[i];
@@ -163,6 +190,139 @@ pub fn min_area_rect(points: &[(f64, f64)]) -> RotatedRect {
         }
     }
     best.expect("hull has edges").1
+}
+
+/// OpenCV's rotating-calipers search for the minimum-area rectangle, in
+/// single precision exactly as `cv::rotatingCalipers(..., CALIPERS_MINAREARECT)`
+/// runs it, so rounding matches. `hull` is a convex polygon (any orientation)
+/// with at least three vertices; returns `(centre, width vector, height vector)`
+/// before the final `sqrt`/`atan2`.
+pub fn rotating_calipers(hull: &[(f32, f32)]) -> ((f32, f32), (f32, f32), (f32, f32)) {
+    let n = hull.len();
+    let points = hull;
+    let mut vect = vec![(0f32, 0f32); n];
+    let mut inv_length = vec![0f32; n];
+    let (mut left, mut bottom, mut right, mut top) = (0usize, 0usize, 0usize, 0usize);
+
+    let mut pt0 = points[0];
+    let (mut left_x, mut right_x) = (pt0.0, pt0.0);
+    let (mut top_y, mut bottom_y) = (pt0.1, pt0.1);
+    for i in 0..n {
+        if pt0.0 < left_x {
+            left_x = pt0.0;
+            left = i;
+        }
+        if pt0.0 > right_x {
+            right_x = pt0.0;
+            right = i;
+        }
+        if pt0.1 > top_y {
+            top_y = pt0.1;
+            top = i;
+        }
+        if pt0.1 < bottom_y {
+            bottom_y = pt0.1;
+            bottom = i;
+        }
+        let pt = points[(i + 1) % n];
+        let (dx, dy) = ((pt.0 - pt0.0) as f64, (pt.1 - pt0.1) as f64);
+        vect[i] = (dx as f32, dy as f32);
+        inv_length[i] = (1.0 / (dx * dx + dy * dy).sqrt()) as f32;
+        pt0 = pt;
+    }
+
+    // Orientation of the hull from the first non-degenerate corner.
+    let mut orientation = 0f32;
+    let (mut ax, mut ay) = (vect[n - 1].0 as f64, vect[n - 1].1 as f64);
+    for v in &vect {
+        let (bx, by) = (v.0 as f64, v.1 as f64);
+        let convexity = ax * by - ay * bx;
+        if convexity != 0.0 {
+            orientation = if convexity > 0.0 { 1.0 } else { -1.0 };
+            break;
+        }
+        ax = bx;
+        ay = by;
+    }
+    let (mut base_a, mut base_b) = (orientation, 0f32);
+
+    let mut seq = [bottom, right, top, left];
+    let mut min_area = f32::MAX;
+    // The best rectangle: (leftmost point index, base_a, width, base_b, height, bottom point index).
+    let mut best = (0usize, 0f32, 0f32, 0f32, 0f32, 0usize);
+
+    for _ in 0..n {
+        let rot = [
+            vect[seq[0]],
+            (vect[seq[1]].1, -vect[seq[1]].0),
+            (-vect[seq[2]].0, -vect[seq[2]].1),
+            (-vect[seq[3]].1, vect[seq[3]].0),
+        ];
+        let mut main_element = 0;
+        let mut max_cos = (base_a * rot[0].0 + base_b * rot[0].1) * inv_length[seq[0]];
+        for i in 1..4 {
+            let cos = (base_a * rot[i].0 + base_b * rot[i].1) * inv_length[seq[i]];
+            if cos > max_cos {
+                main_element = i;
+                max_cos = cos;
+            }
+        }
+
+        // Rotate the calipers onto the edge that is closest to aligned.
+        let pindex = seq[main_element];
+        let lead_x = vect[pindex].0 * inv_length[pindex];
+        let lead_y = vect[pindex].1 * inv_length[pindex];
+        (base_a, base_b) = match main_element {
+            0 => (lead_x, lead_y),
+            1 => (lead_y, -lead_x),
+            2 => (-lead_x, -lead_y),
+            _ => (-lead_y, lead_x),
+        };
+        seq[main_element] = (seq[main_element] + 1) % n;
+
+        let dx = points[seq[1]].0 - points[seq[3]].0;
+        let dy = points[seq[1]].1 - points[seq[3]].1;
+        let width = dx * base_a + dy * base_b;
+        let dx = points[seq[2]].0 - points[seq[0]].0;
+        let dy = points[seq[2]].1 - points[seq[0]].1;
+        let height = -dx * base_b + dy * base_a;
+        let area = width * height;
+        if area <= min_area {
+            min_area = area;
+            best = (seq[3], base_a, width, base_b, height, seq[0]);
+        }
+    }
+
+    let (left_index, a1, width, b1, height, bottom_index) = best;
+    let (a2, b2) = (-b1, a1);
+    let left_point = points[left_index];
+    let bottom_point = points[bottom_index];
+    let c1 = a1 * left_point.0 + left_point.1 * b1;
+    let c2 = a2 * bottom_point.0 + bottom_point.1 * b2;
+    let inverse_det = 1.0f32 / (a1 * b2 - a2 * b1);
+    let corner = (
+        (c1 * b2 - c2 * b1) * inverse_det,
+        (a1 * c2 - a2 * c1) * inverse_det,
+    );
+    (corner, (a1 * width, b1 * width), (a2 * height, b2 * height))
+}
+
+/// `cv::minAreaRect` for a convex `hull` with three or more vertices, in the
+/// order and precision OpenCV uses. The result is *not* yet range-normalised.
+pub fn min_area_rect_from_hull(hull: &[(f32, f32)]) -> RotatedRect {
+    let (corner, width_vector, height_vector) = rotating_calipers(hull);
+    let cx = corner.0 + (width_vector.0 + height_vector.0) * 0.5;
+    let cy = corner.1 + (width_vector.1 + height_vector.1) * 0.5;
+    let w = ((width_vector.0 as f64).powi(2) + (width_vector.1 as f64).powi(2)).sqrt() as f32;
+    let h = ((height_vector.0 as f64).powi(2) + (height_vector.1 as f64).powi(2)).sqrt() as f32;
+    let angle = (width_vector.1 as f64).atan2(width_vector.0 as f64) as f32;
+    RotatedRect::new(
+        cx as f64,
+        cy as f64,
+        w as f64,
+        h as f64,
+        (angle as f64 * 180.0 / std::f64::consts::PI) as f32 as f64,
+    )
 }
 
 /// Signed area of a polygon (positive when counter-clockwise in a y-up frame).
@@ -233,6 +393,23 @@ pub fn iou(a: &RotatedRect, b: &RotatedRect) -> f64 {
 }
 
 impl RotatedRect {
+    /// The rectangle as OpenCV 5's `minAreaRect` reports it: angle in
+    /// `[-90, 0)` (an axis-aligned box is always `-90`), with width and height
+    /// swapped when that needs an odd number of quarter turns, and every number
+    /// rounded to `f32`. Over an interval of only 90 degrees the description
+    /// of a given shape is unique.
+    pub fn opencv_normalized(&self) -> Self {
+        let angle = self.angle.rem_euclid(90.0) - 90.0;
+        let quarter_turns = ((angle - self.angle) / 90.0).round() as i64;
+        let (w, h) = if quarter_turns.rem_euclid(2) == 1 {
+            (self.h, self.w)
+        } else {
+            (self.w, self.h)
+        };
+        let f = |v: f64| v as f32 as f64;
+        Self::new(f(self.cx), f(self.cy), f(w), f(h), f(angle))
+    }
+
     /// Same rectangle with `w >= h` and the angle in `[0, 180)`, so two
     /// descriptions of one rectangle compare equal.
     pub fn canonical(&self) -> Self {
@@ -311,7 +488,7 @@ mod tests {
     fn degenerate_inputs_do_not_panic() {
         assert_eq!(min_area_rect(&[]).area(), 0.0);
         assert_eq!(min_area_rect(&[(3.0, 4.0)]).area(), 0.0);
-        let line = min_area_rect(&[(0.0, 0.0), (6.0, 8.0)]);
+        let line = min_area_rect(&[(0.0, 0.0), (6.0, 8.0)]).canonical();
         assert!((line.w - 10.0).abs() < 1e-9 && line.h == 0.0);
     }
 
@@ -346,6 +523,52 @@ mod tests {
             "{}",
             intersection_area(&a, &b)
         );
+    }
+
+    #[test]
+    fn calipers_find_the_minimum_rectangle_of_simple_hulls() {
+        // Axis-aligned, counter-clockwise in a y-up frame.
+        let rect = [(0.0f32, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 5.0)];
+        let found = min_area_rect_from_hull(&rect).canonical();
+        assert!(
+            (found.w - 10.0).abs() < 1e-4 && (found.h - 5.0).abs() < 1e-4,
+            "{found:?}"
+        );
+        assert!(
+            (found.cx - 5.0).abs() < 1e-4 && (found.cy - 2.5).abs() < 1e-4,
+            "{found:?}"
+        );
+
+        // A tilted rectangle, given as a hull of its corners.
+        let truth = RotatedRect::new(50.0, 40.0, 30.0, 12.0, 20.0);
+        let hull: Vec<(f64, f64)> = convex_hull(&truth.corners());
+        let corners: Vec<(f32, f32)> = hull.iter().map(|&(x, y)| (x as f32, y as f32)).collect();
+        let found = min_area_rect_from_hull(&corners).canonical();
+        assert!(
+            (found.w - 30.0).abs() < 1e-3 && (found.h - 12.0).abs() < 1e-3,
+            "{found:?}"
+        );
+        assert!((found.angle - 20.0).abs() < 1e-3, "{found:?}");
+    }
+
+    #[test]
+    fn opencv_normalisation_puts_the_angle_in_minus_90_to_0() {
+        // An axis-aligned box is always -90, swapping the sides from angle 0.
+        let upright = RotatedRect::new(10.0, 20.0, 40.0, 30.0, 0.0).opencv_normalized();
+        assert_eq!((upright.w, upright.h, upright.angle), (30.0, 40.0, -90.0));
+        let already = RotatedRect::new(10.0, 20.0, 40.0, 30.0, -90.0).opencv_normalized();
+        assert_eq!((already.w, already.h, already.angle), (40.0, 30.0, -90.0));
+        // A small tilt keeps its sides; the opposite tilt wraps by a quarter turn.
+        let tilt = RotatedRect::new(0.0, 0.0, 40.0, 30.0, -3.5).opencv_normalized();
+        assert_eq!((tilt.w, tilt.h, tilt.angle), (40.0, 30.0, -3.5));
+        let wrapped = RotatedRect::new(0.0, 0.0, 40.0, 30.0, 3.5).opencv_normalized();
+        assert_eq!((wrapped.w, wrapped.h, wrapped.angle), (30.0, 40.0, -86.5));
+        // Equivalent descriptions normalise identically.
+        let a = RotatedRect::new(5.0, 5.0, 40.0, 30.0, 20.0).opencv_normalized();
+        let b = RotatedRect::new(5.0, 5.0, 30.0, 40.0, 110.0).opencv_normalized();
+        let c = RotatedRect::new(5.0, 5.0, 40.0, 30.0, -160.0).opencv_normalized();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
     }
 
     #[test]

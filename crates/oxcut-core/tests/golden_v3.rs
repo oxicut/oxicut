@@ -11,6 +11,7 @@ use oxcut_core::background::background_colors;
 use oxcut_core::candidates::candidate_rects;
 use oxcut_core::color::{rgb_to_gray, rgb_to_lab};
 use oxcut_core::contours::{contour_info, find_external_contours};
+use oxcut_core::detect::{DetectOptions, detect_v3};
 use oxcut_core::foreground::foreground;
 use oxcut_core::geometry::RotatedRect;
 use oxcut_core::io::{load_image, to_detection_rgb};
@@ -558,4 +559,176 @@ fn edge_refinement_matches_python() {
         println!("  {problem}");
     }
     assert_eq!(exact, rects, "edge refinement differs from Python");
+}
+
+/// Full pipeline on one image, compared with Python's final regions.
+/// Returns `None` when the region counts differ, else the worst
+/// `(position/size gap in px, angle gap in degrees)`.
+fn compare_regions(source: &image::RgbImage, expected: &GoldenImage) -> Option<(f64, f64)> {
+    let options = DetectOptions {
+        inset: 0,
+        padding: 0,
+        ..Default::default()
+    };
+    let detection = detect_v3(source, &options);
+    let ours: Vec<RotatedRect> = detection
+        .regions
+        .iter()
+        .map(|r| r.rect.canonical())
+        .collect();
+    if ours.len() != expected.regions.len() {
+        return None;
+    }
+    let mut unused = ours;
+    let (mut worst_px, mut worst_deg) = (0f64, 0f64);
+    for want in &expected.regions {
+        let want = want.canonical();
+        let (index, _) = unused
+            .iter()
+            .enumerate()
+            .map(|(i, r)| (i, (r.cx - want.cx).abs() + (r.cy - want.cy).abs()))
+            .min_by(|a, b| a.1.total_cmp(&b.1))?;
+        let got = unused.swap_remove(index);
+        let period = if (got.w - got.h).abs() < 1.0 {
+            90.0
+        } else {
+            180.0
+        };
+        let mut degrees = (got.angle - want.angle).abs() % period;
+        degrees = degrees.min(period - degrees);
+        worst_px = worst_px
+            .max((got.cx - want.cx).abs())
+            .max((got.cy - want.cy).abs())
+            .max((got.w - want.w).abs())
+            .max((got.h - want.h).abs());
+        worst_deg = worst_deg.max(degrees);
+    }
+    Some((worst_px, worst_deg))
+}
+
+#[test]
+fn full_pipeline_matches_python_on_identical_pixels() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut matched, mut within_tolerance, mut worst_px, mut worst_deg) = (0, 0, 0f64, 0f64);
+    for (name, expected) in &golden.images {
+        let decoded = load_image(
+            &workspace_root()
+                .join("reference/decoded")
+                .join(format!("{name}.png")),
+        )
+        .unwrap();
+        match compare_regions(&to_detection_rgb(&decoded), expected) {
+            Some((px, deg)) => {
+                matched += 1;
+                within_tolerance += (px <= 2.0 && deg <= 0.5) as usize;
+                worst_px = worst_px.max(px);
+                worst_deg = worst_deg.max(deg);
+                if px > 2.0 || deg > 0.5 {
+                    println!("  {name}: {px:.3} px, {deg:.3} deg");
+                }
+            }
+            None => println!("  {name}: region count differs from Python"),
+        }
+    }
+    let n = golden.images.len();
+    println!(
+        "{n} images: same region count {matched}, within 2 px / 0.5 deg {within_tolerance}, worst {worst_px:.3} px {worst_deg:.3} deg"
+    );
+    // Phase 1 target: within 2 px / 0.5 deg of Python. Known exceptions: two images
+    // whose foreground differs from Python by a few pixels (low-contrast-02, tight-gutters-02)
+    // and one where float32 rounding in minAreaRect tips a floor() (scansplitter-08).
+    assert_eq!(matched, n, "region counts differ from Python");
+    assert!(
+        within_tolerance >= n - 3,
+        "only {within_tolerance} of {n} within tolerance"
+    );
+}
+
+#[test]
+fn full_pipeline_on_the_original_jpegs() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let (mut matched, mut within_tolerance, mut worst_px, mut worst_deg, mut jpegs) =
+        (0, 0, 0f64, 0f64, 0);
+    for (name, expected) in &golden.images {
+        if !name.ends_with(".jpg") {
+            continue;
+        }
+        jpegs += 1;
+        let image =
+            load_image(&workspace_root().join("reference/ScanSplitter").join(name)).unwrap();
+        match compare_regions(&to_detection_rgb(&image), expected) {
+            Some((px, deg)) => {
+                matched += 1;
+                within_tolerance += (px <= 2.0 && deg <= 0.5) as usize;
+                worst_px = worst_px.max(px);
+                worst_deg = worst_deg.max(deg);
+                if px > 2.0 || deg > 0.5 {
+                    println!("  {name}: {px:.3} px, {deg:.3} deg");
+                }
+            }
+            None => println!("  {name}: region count differs from Python"),
+        }
+    }
+    println!(
+        "{jpegs} JPEGs: same region count {matched}, within 2 px / 0.5 deg {within_tolerance}, worst {worst_px:.3} px {worst_deg:.3} deg"
+    );
+}
+
+#[test]
+fn first_divergent_stage_per_image() {
+    if !reference_available() {
+        return;
+    }
+    let golden = golden();
+    let mut diverged = 0;
+    for (name, expected) in &golden.images {
+        let decoded = load_image(
+            &workspace_root()
+                .join("reference/decoded")
+                .join(format!("{name}.png")),
+        )
+        .unwrap();
+        let options = DetectOptions {
+            inset: 0,
+            padding: 0,
+            ..Default::default()
+        };
+        let stages = detect_v3(&to_detection_rgb(&decoded), &options).stages;
+        let checks: [(&str, &[RotatedRect], &[GoldenRect]); 6] = [
+            ("candidates", &stages.candidates, &expected.candidates),
+            ("merged", &stages.merged, &expected.merged),
+            ("deduplicated", &stages.deduplicated, &expected.deduplicated),
+            ("split", &stages.split, &expected.split),
+            ("snapped", &stages.snapped, &expected.snapped),
+            ("refined", &stages.refined, &expected.refined),
+        ];
+        let first = checks
+            .iter()
+            .find(|(_, ours, theirs)| match_rects(ours, theirs, 0.05).is_none());
+        if let Some((stage, ours, theirs)) = first {
+            diverged += 1;
+            let fg_pixels = stages
+                .foreground_mask
+                .as_raw()
+                .iter()
+                .filter(|&&v| v != 0)
+                .count();
+            println!(
+                "  {name}: first differs at {stage} ({} vs python {}); foreground {fg_pixels} vs {}",
+                ours.len(),
+                theirs.len(),
+                expected.foreground_count
+            );
+        }
+    }
+    println!(
+        "{} images, {diverged} diverge at some stage",
+        golden.images.len()
+    );
 }
