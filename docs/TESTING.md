@@ -1,6 +1,6 @@
 # Trying OxiCut by hand
 
-This is the first version you can use on real scans. It finds prints with the built-in **v7-lite detector** (ScanSplitter's v3 plus v7's edge tightening; plain v3 can be chosen in the Detection tab), lets you correct the boxes, and exports the straightened crops. Your original scans are never changed.
+This is the first version you can use on real scans. It finds prints with the **v7-lite detector** by default (ScanSplitter's v3 plus v7's edge tightening), or with the full **v7 detector** once you download the MobileSAM models (Models tab, about 45 MB); plain v3 can also be chosen in the Detection tab, lets you correct the boxes, and exports the straightened crops. Your original scans are never changed.
 
 ## Start it
 
@@ -30,14 +30,15 @@ Close the app before rebuilding: Windows will not replace a running exe.
 
 Things worth checking in particular:
 
-- A white-bordered print on your white lid: does the box land on the photo or on the paper? v7-lite should sit on the photo where v3 ran onto the border; switch the detector in the Detection tab and use *Re-detect all* to compare the two on the same scans.
+- **Try v7.** Download the models in the Models tab, choose "v7 · most accurate" in the Detection tab, and use *Re-detect all*. It should find prints v7-lite missed (on the test scans: the top-middle print of the tape scan and the second photo of the 16-bit TIFF) and takes a few seconds per scan. Please note any scan where v7 is worse than v7-lite.
+- A white-bordered print on your white lid: does the box land on the photo or on the paper? v7-lite and v7 should sit on the photo where v3 ran onto the border.
 - A 16-bit TIFF from the Epson: export as *Same as the scan* and open the result. It should still be 16-bit and open in Windows Photos and IrfanView.
 - Prints touching each other, or touching the edge of the bed.
 - A big batch (dozens of scans): does the window stay responsive?
 
 ## Known gaps
 
-- v7-lite is only part of ScanSplitter's v7. It does not yet weigh alternative proposals against each other, drop prints seen through glassine sleeves, or use the MobileSAM-based v5 anchors, so it can still miss or merge prints (v3 and v7-lite find the same number of prints). The Models tab can already download and verify the model files, but nothing uses them yet.
+- v7-lite is only part of ScanSplitter's v7 (no models): it finds the same number of prints as v3. The full v7 is much better at counting them, but a whole album page can still come out as one box, as in ScanSplitter.
 - Both detectors can miss pale prints on a white background and can merge prints that touch. These are the same limits ScanSplitter's v3 has, which is where the detector comes from.
 - DPI and EXIF are not copied into the crops yet (the option is shown greyed out).
 - The list of scans is not saved: closing the app forgets it (projects come later). Settings are kept.

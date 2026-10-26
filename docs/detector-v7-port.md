@@ -111,3 +111,16 @@ Measured with `oxicut bench` at a 0 px trim (box quality / F1@0.85 / count accur
 | robust-holdout | 79.0 / 64.6 / 55.3 | 81.2 / 72.8 / 55.3 | 88.8 box quality |
 
 Tightening makes boxes tighter (tightness 85.2% to 88.2%) at unchanged coverage and lifts strict accuracy by about 7 points; it cannot change the number of prints, which is what the remaining stages are for. Also: v3 at a 0 px trim (79.0) already beats v3 at ScanSplitter's default of 10 px (73.0) on the holdout set, which is why OxiCut's default trim is 0.
+
+## Full v7 (MobileSAM, v5 anchors, arbitration)
+
+Everything in ScanSplitter's v7 is now ported: `sam.rs` (MobileSAM through `ort`, `_v4_mask_rect`, `_v4_refine_rectangles`), `v5.rs` (texture, frames, combine, stacked-sleeve expansion, boundary recovery), `chroma.rs`, `score.rs` (`_side_contrast`, `_score_rect`, `_edge_sharpness`, `_ghost_stats`, `_select`, `_drop_ghosts`) and `v7::detect_v7`. Results and parity are in `docs/PROGRESS.md`.
+
+Deviations and findings:
+
+- **Contours with holes.** The closed-frame pass uses `findContours(RETR_LIST)`, whose hole borders are the outline of the space inside a closed edge. `contours::find_all_contours` is Suzuki and Abe's border following. A one-pixel ring's hole border cuts the four corner pixels (area 30 where the outer border gives 32), as OpenCV's does.
+- **`remap`.** OpenCV quantises sampling coordinates to 1/32 pixel before interpolating; `imgproc::Sampler` does the same. The remaining score differences (up to 2 on a 0-255 scale for a few candidates) come from float summation order and do not change decisions except on one scan.
+- **Gaussian blur.** Float images use a kernel of `round(6 sigma + 1) | 1` taps, 8-bit ones `round(8 sigma + 1) | 1`; the 8-bit path is computed in float and rounded rather than in OpenCV's fixed point (chroma only; no mismatch seen).
+- **`fillPoly` for the ghost statistics** is replaced by an inclusive point-in-polygon test on the integer vertices; the statistics differ from Python's by about 1 on the worst candidate.
+- **Concurrency.** `ort` sessions need `&mut self` to run and the environment is per process, so every worker thread owns its sessions (`sam::with_thread_sam`).
+- **Remaining misses** are the same as ScanSplitter's: a whole album page stays one box, and pale prints on white can still be missed.

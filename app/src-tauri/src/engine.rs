@@ -13,10 +13,10 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use image::RgbImage;
 use image::codecs::jpeg::JpegEncoder;
-use oxicut_core::detect::{DetectOptions, detect_v3};
+use oxicut_core::detect::{DetectOptions, Detection, detect_v3};
 use oxicut_core::io::{load_image, to_detection_rgb};
 use oxicut_core::resize::resize_area;
-use oxicut_core::v7::detect_v7_lite;
+use oxicut_core::v7::{detect_v7, detect_v7_lite};
 use serde::{Deserialize, Serialize};
 
 /// File types the app reads.
@@ -118,6 +118,10 @@ pub enum Detector {
     #[serde(rename = "v7-lite")]
     #[default]
     V7Lite,
+    /// Full v7: MobileSAM anchors, several proposal sets, evidence-based arbitration.
+    /// Needs the MobileSAM models.
+    #[serde(rename = "v7")]
+    V7,
 }
 
 /// The detection settings that matter to the detector.
@@ -235,6 +239,22 @@ fn write_preview(rgb: &RgbImage, cache_dir: &Path, scan: &Path) -> Result<(), St
     std::fs::rename(&part, &target).map_err(|e| format!("could not store the preview: {e}"))
 }
 
+/// Full v7 on this thread's MobileSAM sessions (loaded on first use).
+fn detect_full_v7(rgb: &image::RgbImage, options: &DetectOptions) -> Result<Detection, String> {
+    let dir = oxicut_models::models_dir().map_err(|e| e.to_string())?;
+    let encoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_ENCODER);
+    let decoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_DECODER);
+    if !encoder.is_file() || !decoder.is_file() {
+        return Err(
+            "The v7 detector needs the MobileSAM models: download them in the Models tab.".into(),
+        );
+    }
+    oxicut_core::sam::with_thread_sam(&encoder, &decoder, |sam| detect_v7(rgb, options, sam))
+        .and_then(|result| result)
+        .map(|(detection, _)| detection)
+        .map_err(|e| e.to_string())
+}
+
 /// Decode `path`, find its prints, and leave a screen preview in the cache.
 pub fn analyze_scan(
     path: &Path,
@@ -252,6 +272,7 @@ pub fn analyze_scan(
     let detection = match settings.mode {
         Detector::V3 => detect_v3(&rgb, &options),
         Detector::V7Lite => detect_v7_lite(&rgb, &options),
+        Detector::V7 => detect_full_v7(&rgb, &options)?,
     };
     let boxes = detection
         .regions
@@ -500,6 +521,12 @@ mod tests {
         // The screen sends the names as written in the settings file.
         let parsed: DetectSettings = serde_json::from_str(r#"{"mode": "v3"}"#).unwrap();
         assert_eq!(parsed.mode, Detector::V3);
+        assert_eq!(
+            serde_json::from_str::<DetectSettings>(r#"{"mode": "v7"}"#)
+                .unwrap()
+                .mode,
+            Detector::V7
+        );
         assert_eq!(
             serde_json::from_str::<DetectSettings>("{}").unwrap().mode,
             Detector::V7Lite

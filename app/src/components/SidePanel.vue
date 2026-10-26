@@ -16,6 +16,11 @@ import {
 type Tab = "detect" | "export" | "models";
 const tab = ref<Tab>("detect");
 
+// v7 runs MobileSAM, so it can be chosen once both of its files are on disk.
+const v7Ready = () =>
+  state.models.filter((m) => m.id.startsWith("mobilesam")).length > 0 &&
+  state.models.filter((m) => m.id.startsWith("mobilesam")).every((m) => m.state === "ready");
+
 const modelNeedsDownload = () => state.models.some((m) => m.state !== "ready");
 const downloading = () => Object.keys(state.modelProgress).length > 0;
 
@@ -43,19 +48,24 @@ const openModelsFolder = () =>
       <label class="field">
         <span>Detector</span>
         <select v-model="state.settings.mode">
-          <option value="v7-lite">v7-lite · v3 plus edge tightening (recommended)</option>
+          <option value="v7" :disabled="!v7Ready()">
+            v7 · most accurate{{ v7Ready() ? "" : " (download the models first)" }}
+          </option>
+          <option value="v7-lite">v7-lite · v3 plus edge tightening</option>
           <option value="v3">v3 · colour and edges only</option>
-          <option value="v5" disabled>v5 · needs the models (not available yet)</option>
-          <option value="v7" disabled>v7 · full accuracy, needs the models (not available yet)</option>
         </select>
       </label>
       <p class="callout">
         <template v-if="state.settings.mode === 'v3'">
           v3 works on colour and edges only. On white-bordered prints the box can run out onto the border or its shadow.
         </template>
+        <template v-else-if="state.settings.mode === 'v7'">
+          v7 uses the MobileSAM model to find prints, weighs it against colour, edge and texture cues, and moves each side
+          onto the photograph's own edge. It is the most accurate and takes a few seconds per scan.
+        </template>
         <template v-else>
           v7-lite takes v3's boxes and moves each side onto the photograph's own edge when it finds a clear border. It can
-          still miss or merge prints; the full v7 will need the models.
+          still miss or merge prints; v7 (needs the models) is better at counting them.
         </template>
       </p>
 
@@ -144,8 +154,8 @@ const openModelsFolder = () =>
 
     <div v-else class="body">
       <p class="muted lead">
-        The more accurate detectors (v5, v7) will use the MobileSAM model. They are not available yet, so downloading is
-        optional for now. Models are fetched once, checked against a fixed checksum, and kept outside OxiCut's installer.
+        The v7 detector uses the MobileSAM model. It is optional: v7-lite works without it. Models are fetched once,
+        checked against a fixed checksum, and kept outside OxiCut's installer.
       </p>
       <ul class="models">
         <li v-for="m in state.models" :key="m.id" class="model">

@@ -34,3 +34,31 @@ Gotcha: Windows PowerShell 5.1 `Set-Content -Encoding utf8` writes a BOM, which 
 The three outside tolerance, and why, are in `docs/detector-v7-port.md`. The biggest lessons from the port: ScanSplitter pins OpenCV 5, whose behaviour differs from OpenCV 4 in several places that matter (gray weights, linear warps in floating point, `minAreaRect` angle range, contour order); and Rust's JPEG decoder is not bit-identical to PIL's, so parity tests read PIL-decoded pixels.
 
 Run the checks with `cargo nextest run` (the golden tests need `reference/ScanSplitter` and `reference/decoded`, made by `tools/dump_v3_reference.py`; they skip without them).
+
+## Phase 2: MobileSAM and the full v7 detector (2026-10-26)
+
+`oxicut models status|download|verify|path` fetches the pinned MobileSAM pair (28.2 MB encoder, 16.5 MB decoder) through the checksum-verified downloader. `oxicut-core` runs both through `ort` and has the whole of ScanSplitter's v7, selectable as `--mode v7` in the CLI and as "v7 · most accurate" in the app once the models are downloaded.
+
+Checked against Python with golden data (`tools/dump_sam_reference.py`, `tools/dump_v7_full_reference.py`; `benchmarks/golden/sam.json`, `v7_full.json`):
+
+| Stage | Match with Python |
+|---|---|
+| MobileSAM encoder embedding | sum within 2e-5, first values within 3e-5 |
+| Decoder masks (predicted IoU, pixel count) | IoU equal to 4 digits; pixel counts equal or off by at most 3 |
+| v4 refined rectangles | IoU 1.0000 |
+| Texture islands, closed frames, capped v3 | identical on all 114 fixtures |
+| Chroma proposals | identical on 113 of 114 |
+| v3 proposals, v5 set, anchors | identical on 112 of 114 (v3 edge cases from Phase 1) |
+| Chosen after arbitration, final | identical on 113 of 114 |
+| Scores / sharpness / ghost stats | within 2.2 / 0.035 / 1.2 on 687 aligned candidates (remap rounding; no effect on decisions beyond the one differing scan) |
+
+Benchmark at a 0 px trim (`oxicut bench --mode v7`):
+
+| Suite | Box quality | F1@0.85 | Count accuracy |
+|---|---:|---:|---:|
+| robust-dev | 83.6% | 77.6% | 74.5% |
+| robust-holdout | 88.2% | 81.2% | 72.3% |
+
+ScanSplitter publishes 88.8% box quality for v7 on the holdout set; v3 at the same trim gets 79.0%. On the hand-test scans v7 found the prints v7-lite missed: 5 instead of 4 on `scansplitter-03` and on the 16-bit Epson TIFF. A whole album page (`album-07`) is still one box, as in ScanSplitter.
+
+Practical notes: `ort` 2.0.0-rc.15 has one `Environment` per process and sessions need `&mut` to run, so each worker thread keeps its own `MobileSam` (`sam::with_thread_sam`); the app uses two workers for v7. ONNX Runtime is linked statically, so the exe needs no extra DLL. v7 takes about 3 s per scan on this machine.

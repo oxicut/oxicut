@@ -13,7 +13,7 @@ use oxicut_core::io::load_image;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::engine::{BoxDto, DetectSettings, ScanAnalysis, analyze_scan};
+use crate::engine::{BoxDto, DetectSettings, Detector, ScanAnalysis, analyze_scan};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(
@@ -52,10 +52,13 @@ pub fn detect_batch(
     cancel: &AtomicBool,
     emit: &(dyn Fn(DetectEvent) + Sync),
 ) -> Result<(), String> {
+    // v7 runs a neural network that uses several cores itself, and every worker holds its
+    // own copy of the model, so it gets fewer workers.
+    let limit = if settings.mode == Detector::V7 { 2 } else { 4 };
     let threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(2)
-        .clamp(1, 4);
+        .clamp(1, limit);
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build()

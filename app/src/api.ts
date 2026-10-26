@@ -36,7 +36,7 @@ export interface ScanAnalysis {
   millis: number;
 }
 
-export type DetectorMode = "v3" | "v7-lite";
+export type DetectorMode = "v3" | "v7-lite" | "v7";
 
 export interface DetectSettings {
   mode: DetectorMode;

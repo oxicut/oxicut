@@ -31,7 +31,7 @@ export const FLAG_LABELS: Record<Flag["code"], string> = {
   overlap: "Overlapping boxes",
 };
 
-const AVAILABLE_DETECTORS: string[] = ["v3", "v7-lite"];
+const AVAILABLE_DETECTORS: string[] = ["v3", "v7-lite", "v7"];
 
 export const defaultSettings: AppSettings = {
   mode: "v7-lite",

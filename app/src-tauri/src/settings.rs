@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
-    /// Detector: `v3` or `v7-lite` (v5 and v7 need models and are not available yet).
+    /// Detector: `v3`, `v7-lite` or `v7` (the last needs the MobileSAM models).
     pub mode: String,
     pub min_area_percent: f64,
     pub max_area_percent: f64,
