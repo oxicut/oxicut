@@ -60,14 +60,14 @@ Goal: `oxcut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotate
 - [x] Port v3 **background model**: platen/paper colour in Lab sampled from the scan border. _(`color.rs`, `kmeans.rs`, `background.rs`; reproduces Python's clusters exactly on 111 of 114 fixtures, see port notes. Golden data: `benchmarks/golden/v3.json` from `tools/dump_v3_reference.py`.)_
 - [x] Port v3 **foreground mask**: Lab distance to the background clusters, Otsu threshold with the 18 floor. _(`foreground.rs`; Otsu equal on all 114 fixtures, pixel counts exact on 106.)_
 - [x] Port v3 **dense non-background region** detection: density filter, open/close morphology, contours, `minAreaRect`, area/fill/aspect filters. _(`mask.rs`, `contours.rs`, `candidates.rs`; candidates identical to Python on 112 of 114 fixtures, see port notes.)_
-- [x] Port v3 **fragment merge and dedupe**. _(merge.rs, rotated-rectangle intersection in geometry.rs; identical to Python on all 114 fixtures.)_
-- [x] Port v3 **gutter split** for touching prints.
+- [x] Port v3 **fragment merge and dedupe**. _(`merge.rs`, rotated-rectangle intersection in `geometry.rs`; identical to Python on all 114 fixtures.)_
+- [x] Port v3 **gutter split** for touching prints. _(`split.rs`, `warp.rs`; identical to Python on all 114 fixtures.)_
 - [x] Port v3 **angle snap** to long physical edges (Gaussian, Canny, probabilistic Hough). _(Exact on all 320 fixture rectangles; see port notes.)_
 - [x] Port v3 **side refinement** (`_refine_rect_to_edges`): move each side onto the strongest edge. _(`refine.rs`; exact on all 320 fixture rectangles.)_
-- [ ] `oxcut detect` with `--mode v3` and `--debug` (per-stage overlays + JSON).
-- [ ] Crop: rotate full-res around box centre, axis-aligned crop, optional inset px, preserve bit depth. `oxcut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`.
-- [ ] **Done when:** v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap.
-- [ ] Commit + `docs/PROGRESS.md` entry.
+- [x] `oxcut detect` with `--mode v3` and `--debug` (per-stage overlays + JSON). _(`boxes.json`, `debug.png`, `stages.png`, `stages.json`, `foreground.png`, `region-mask.png`; a 1400x1000 scan takes 0.25 s.)_
+- [x] Crop: rotate full-res around box centre, axis-aligned crop, preserve bit depth. `oxcut crop scan.tif --boxes boxes.json -o out/ --format same|jpg|png|tiff`. _(`crop.rs` samples each region directly instead of rotating the whole scan; 16-bit TIFF stays 16-bit. The inset is applied during detection, `--inset`, default 10 as in ScanSplitter v3.)_
+- [x] **Done when:** v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap. _(Met on 111 of 114 fixtures with identical pixels; all 114 give the same box count. The three misses and the JPEG-decoder caveat are in `docs/detector-v7-port.md`. Clippy clean, 118 tests.)_
+- [x] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 2: Model registry, MobileSAM via `ort`, v5, v7, benchmark
 
