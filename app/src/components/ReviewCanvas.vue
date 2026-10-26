@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Canvas, FabricImage, Point, Rect, util } from "fabric";
+import { boxCorners, handlePoint, sourceSquare } from "../loupe";
 import { FLAG_LABELS, newBoxId, previewFor, type BoxItem, type ScanItem } from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
@@ -95,6 +96,127 @@ function commit() {
   syncState();
 }
 
+// ------------------------------------------------------------------- loupe
+
+/** Edge of the round magnifier, in CSS pixels. */
+const LOUPE_SIZE = 168;
+/** How much larger than the main view the loupe shows the scan (never below 1 screen pixel per scan pixel). */
+const LOUPE_MAGNIFY = 4;
+
+const loupeEl = ref<HTMLCanvasElement>();
+const loupeVisible = ref(false);
+const loupePlace = ref("top-right");
+let previewImage: FabricImage | undefined;
+
+function hideLoupe() {
+  loupeVisible.value = false;
+}
+
+/**
+ * Magnify the scan around the handle being dragged and draw the box over it. The loupe sits in the
+ * stage corner away from the pointer, so it never covers what is being placed.
+ */
+function drawLoupe(target: Rect, corner: string, event?: Event) {
+  const surface = loupeEl.value;
+  const image = previewImage;
+  const scan = props.scan;
+  if (!canvas || !surface || !image || !scan || !host.value) return;
+  const box = {
+    cx: target.left,
+    cy: target.top,
+    w: target.width * target.scaleX,
+    h: target.height * target.scaleY,
+    angle: target.angle,
+  };
+  const centre = handlePoint(box, corner);
+  const context = surface.getContext("2d");
+  if (!centre || !context) return hideLoupe();
+
+  const ratio = window.devicePixelRatio || 1;
+  const pixels = Math.round(LOUPE_SIZE * ratio);
+  if (surface.width !== pixels) {
+    surface.width = pixels;
+    surface.height = pixels;
+  }
+  const magnify = Math.max(1, canvas.getZoom() * LOUPE_MAGNIFY);
+  const square = sourceSquare(centre, LOUPE_SIZE, magnify);
+  const toLoupe = (p: { x: number; y: number }) => ({ x: (p.x - square.x) * magnify, y: (p.y - square.y) * magnify });
+
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
+  context.save();
+  context.beginPath();
+  context.arc(LOUPE_SIZE / 2, LOUPE_SIZE / 2, LOUPE_SIZE / 2, 0, Math.PI * 2);
+  context.clip();
+  context.fillStyle = getComputedStyle(host.value).getPropertyValue("--stage").trim() || "#888";
+  context.fillRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
+
+  // The part of the square that lies on the scan; the rest stays stage-coloured.
+  const k = image.width / scan.width;
+  const x0 = Math.max(0, square.x);
+  const y0 = Math.max(0, square.y);
+  const x1 = Math.min(scan.width, square.x + square.side);
+  const y1 = Math.min(scan.height, square.y + square.side);
+  if (x1 > x0 && y1 > y0) {
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      image.getElement() as CanvasImageSource,
+      x0 * k,
+      y0 * k,
+      (x1 - x0) * k,
+      (y1 - y0) * k,
+      (x0 - square.x) * magnify,
+      (y0 - square.y) * magnify,
+      (x1 - x0) * magnify,
+      (y1 - y0) * magnify,
+    );
+  }
+
+  const warn = (scan.flags ?? []).some((f) => f.boxId === ids.get(target));
+  const outline = boxCorners(box).map(toLoupe);
+  context.beginPath();
+  outline.forEach((p, i) => (i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y)));
+  context.closePath();
+  context.fillStyle = "rgba(232, 112, 58, 0.12)";
+  context.fill();
+  context.lineWidth = 2;
+  context.strokeStyle = warn ? WARNING : ACCENT;
+  context.stroke();
+
+  // Crosshair with a gap, so the pixel under the handle stays visible.
+  const mid = LOUPE_SIZE / 2;
+  const gap = 5;
+  const reach = 16;
+  for (const [width, colour] of [
+    [3, "rgba(0, 0, 0, 0.6)"],
+    [1, "#ffffff"],
+  ] as const) {
+    context.lineWidth = width;
+    context.strokeStyle = colour;
+    context.beginPath();
+    context.moveTo(mid - reach, mid);
+    context.lineTo(mid - gap, mid);
+    context.moveTo(mid + gap, mid);
+    context.lineTo(mid + reach, mid);
+    context.moveTo(mid, mid - reach);
+    context.lineTo(mid, mid - gap);
+    context.moveTo(mid, mid + gap);
+    context.lineTo(mid, mid + reach);
+    context.stroke();
+  }
+  context.restore();
+
+  const pointer = event as MouseEvent | undefined;
+  if (pointer && typeof pointer.clientX === "number") {
+    const bounds = host.value.getBoundingClientRect();
+    const vertical = pointer.clientY - bounds.top < LOUPE_SIZE + 40 ? "bottom" : "top";
+    const horizontal = pointer.clientX - bounds.left < bounds.width / 2 ? "right" : "left";
+    loupePlace.value = `${vertical}-${horizontal}`;
+  }
+  loupeVisible.value = true;
+}
+
 function fit() {
   if (!canvas || !props.scan || props.scan.width === 0) return;
   const { width, height } = props.scan;
@@ -110,6 +232,8 @@ async function rebuild() {
   if (!canvas) return;
   const token = ++buildToken;
   canvas.discardActiveObject();
+  previewImage = undefined;
+  hideLoupe();
   canvas.remove(...canvas.getObjects());
   syncState();
   loadError.value = "";
@@ -132,6 +256,7 @@ async function rebuild() {
       selectable: false,
       evented: false,
     });
+    previewImage = image;
     canvas.add(image);
     for (const box of scan.boxes) canvas.add(makeMarquee(box));
     syncState();
@@ -251,8 +376,20 @@ onMounted(() => {
     syncState();
   });
   canvas.on("selection:updated", syncState);
-  canvas.on("selection:cleared", syncState);
-  canvas.on("object:modified", commit);
+  canvas.on("selection:cleared", () => {
+    hideLoupe();
+    syncState();
+  });
+  canvas.on("object:modified", () => {
+    hideLoupe();
+    commit();
+  });
+
+  // A magnifier follows any resize handle while it is dragged (not the rotation handle).
+  canvas.on("object:scaling", (opt) => {
+    const corner = opt.transform?.corner;
+    if (corner && ids.has(opt.target)) drawLoupe(opt.target as Rect, corner, opt.e);
+  });
 
   // Hold Shift while rotating to snap to 0/90/180/270.
   canvas.on("object:rotating", (opt) => {
@@ -284,6 +421,7 @@ onMounted(() => {
   });
   canvas.on("mouse:up", () => {
     panning = false;
+    hideLoupe();
     canvas!.setViewportTransform(canvas!.viewportTransform);
   });
 
@@ -337,6 +475,14 @@ watch(() => props.scan?.flags, restyle, { deep: true });
 
     <div ref="host" class="stage">
       <canvas ref="el"></canvas>
+      <canvas
+        v-show="loupeVisible"
+        ref="loupeEl"
+        class="loupe"
+        :class="loupePlace"
+        :style="{ width: `${LOUPE_SIZE}px`, height: `${LOUPE_SIZE}px` }"
+        aria-hidden="true"
+      ></canvas>
       <div v-if="!scan" class="overlay">
         <strong>No scans yet</strong>
         <span>Drop scans or a folder here, or use <em>Add scans…</em></span>
@@ -398,6 +544,31 @@ watch(() => props.scan?.flags, restyle, { deep: true });
   min-height: 0;
   background: var(--stage);
   overflow: hidden;
+}
+.loupe {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--stage);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+}
+.loupe.top-left {
+  top: 12px;
+  left: 12px;
+}
+.loupe.top-right {
+  top: 12px;
+  right: 12px;
+}
+.loupe.bottom-left {
+  bottom: 12px;
+  left: 12px;
+}
+.loupe.bottom-right {
+  bottom: 12px;
+  right: 12px;
 }
 .overlay {
   position: absolute;

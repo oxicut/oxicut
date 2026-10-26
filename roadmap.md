@@ -109,6 +109,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 - [ ] Per-scan Vue view: scan on a Fabric.js canvas, one rotatable/resizable rect per box.
 - [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0° with a modifier key, zoom/pan.
+- [x] Loupe: while a resize handle is dragged, a round magnifier (4x the current zoom, drawn from the preview) shows the area around it with the box outline and a crosshair, placed away from the pointer.
 - [ ] Keyboard: Enter = approve & advance, arrows = move through queue, Delete = remove box.
 - [ ] Flags (warnings): no item found, box touches scan edge, unusual aspect ratio/size, overlapping boxes. Auto-approve unflagged scans.
 - [ ] **Done when:** a scan can be fully corrected by mouse + keyboard without touching settings.
