@@ -36,14 +36,16 @@ export interface ScanAnalysis {
   millis: number;
 }
 
+export type DetectorMode = "v3" | "v7-lite";
+
 export interface DetectSettings {
+  mode: DetectorMode;
   minAreaPercent: number;
   maxAreaPercent: number;
   insetPx: number;
 }
 
 export interface AppSettings extends DetectSettings {
-  mode: string;
   format: "same" | "jpg" | "png" | "tiff";
   jpegQuality: number;
   pattern: string;

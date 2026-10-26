@@ -31,8 +31,10 @@ export const FLAG_LABELS: Record<Flag["code"], string> = {
   overlap: "Overlapping boxes",
 };
 
+const AVAILABLE_DETECTORS: string[] = ["v3", "v7-lite"];
+
 export const defaultSettings: AppSettings = {
-  mode: "v3",
+  mode: "v7-lite",
   minAreaPercent: 2,
   maxAreaPercent: 80,
   insetPx: 0,
@@ -82,7 +84,7 @@ const errorText = (e: unknown) => (typeof e === "string" ? e : e instanceof Erro
 
 function detectSettings(): api.DetectSettings {
   const s = state.settings;
-  return { minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx };
+  return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx };
 }
 
 // ---------------------------------------------------------------- settings
@@ -92,6 +94,8 @@ let saveTimer: number | undefined;
 export async function initSettings() {
   try {
     Object.assign(state.settings, await api.loadSettings());
+    // A detector that is not available (an old or edited settings file) falls back to the default.
+    if (!AVAILABLE_DETECTORS.includes(state.settings.mode)) state.settings.mode = defaultSettings.mode;
   } catch (e) {
     say(`Could not load settings, using defaults: ${errorText(e)}`);
   }

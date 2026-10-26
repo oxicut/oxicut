@@ -16,6 +16,7 @@ use image::codecs::jpeg::JpegEncoder;
 use oxicut_core::detect::{DetectOptions, detect_v3};
 use oxicut_core::io::{load_image, to_detection_rgb};
 use oxicut_core::resize::resize_area;
+use oxicut_core::v7::detect_v7_lite;
 use serde::{Deserialize, Serialize};
 
 /// File types the app reads.
@@ -106,10 +107,24 @@ pub struct BoxDto {
     pub angle: f64,
 }
 
+/// Which detector finds the prints.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Detector {
+    /// ScanSplitter's v3: colour and edges only.
+    #[serde(rename = "v3")]
+    V3,
+    /// v3 plus v7's inner-edge tightening, which keeps boxes off white borders
+    /// and drop shadows.
+    #[serde(rename = "v7-lite")]
+    #[default]
+    V7Lite,
+}
+
 /// The detection settings that matter to the detector.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DetectSettings {
+    pub mode: Detector,
     pub min_area_percent: f64,
     pub max_area_percent: f64,
     pub inset_px: i32,
@@ -118,6 +133,7 @@ pub struct DetectSettings {
 impl Default for DetectSettings {
     fn default() -> Self {
         Self {
+            mode: Detector::default(),
             min_area_percent: 2.0,
             max_area_percent: 80.0,
             // ScanSplitter's v3 trims 10 px, but measured against its own
@@ -232,7 +248,11 @@ pub fn analyze_scan(
     let rgb = to_detection_rgb(&image);
     drop(image); // a 16-bit scan is large; the 8-bit copy is all that is needed from here
 
-    let detection = detect_v3(&rgb, &settings.options());
+    let options = settings.options();
+    let detection = match settings.mode {
+        Detector::V3 => detect_v3(&rgb, &options),
+        Detector::V7Lite => detect_v7_lite(&rgb, &options),
+    };
     let boxes = detection
         .regions
         .iter()
@@ -416,6 +436,7 @@ mod tests {
                 min_area_percent: 60.0,
                 max_area_percent: 90.0,
                 inset_px: 0,
+                ..Default::default()
             },
             &dir.join("c"),
         )
@@ -438,6 +459,52 @@ mod tests {
             .save(&scan)
             .unwrap();
         assert_ne!(preview_path(&cache, &scan), cached);
+    }
+
+    #[test]
+    fn the_detector_choice_reaches_the_detector_and_names_parse() {
+        // A print with a mid-grey border: v3 boxes the whole print, v7-lite the picture.
+        let dir = scratch("detector");
+        let scan = dir.join("bordered.png");
+        let mut image = RgbImage::from_pixel(1000, 700, Rgb([250, 250, 250]));
+        for y in 150..550 {
+            for x in 200..700 {
+                let inside = (216..684).contains(&x) && (166..534).contains(&y);
+                image.put_pixel(
+                    x,
+                    y,
+                    if inside {
+                        Rgb([30, 40, 70])
+                    } else {
+                        Rgb([130, 130, 130])
+                    },
+                );
+            }
+        }
+        image.save(&scan).unwrap();
+
+        let width_with = |mode| {
+            let settings = DetectSettings {
+                mode,
+                ..Default::default()
+            };
+            analyze_scan(&scan, &settings, &dir.join("c"))
+                .unwrap()
+                .boxes[0]
+                .w
+        };
+        let (v3, lite) = (width_with(Detector::V3), width_with(Detector::V7Lite));
+        assert!((v3 - 500.0).abs() < 6.0, "v3 {v3}");
+        assert!((lite - 468.0).abs() < 6.0, "v7-lite {lite}");
+
+        // The screen sends the names as written in the settings file.
+        let parsed: DetectSettings = serde_json::from_str(r#"{"mode": "v3"}"#).unwrap();
+        assert_eq!(parsed.mode, Detector::V3);
+        assert_eq!(
+            serde_json::from_str::<DetectSettings>("{}").unwrap().mode,
+            Detector::V7Lite
+        );
+        assert!(serde_json::from_str::<DetectSettings>(r#"{"mode": "v9"}"#).is_err());
     }
 
     #[test]

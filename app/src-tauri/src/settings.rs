@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
-    /// Detection mode; only `v3` is available so far.
+    /// Detector: `v3` or `v7-lite` (v5 and v7 need models and are not available yet).
     pub mode: String,
     pub min_area_percent: f64,
     pub max_area_percent: f64,
@@ -29,7 +29,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            mode: "v3".into(),
+            mode: "v7-lite".into(),
             min_area_percent: 2.0,
             max_area_percent: 80.0,
             inset_px: 0,

@@ -43,14 +43,20 @@ const openModelsFolder = () =>
       <label class="field">
         <span>Detector</span>
         <select v-model="state.settings.mode">
-          <option value="v3">v3 · built in, no downloads</option>
-          <option value="v5" disabled>v5 · needs models (not available yet)</option>
-          <option value="v7" disabled>v7 · most accurate (not available yet)</option>
+          <option value="v7-lite">v7-lite · v3 plus edge tightening (recommended)</option>
+          <option value="v3">v3 · colour and edges only</option>
+          <option value="v5" disabled>v5 · needs the models (not available yet)</option>
+          <option value="v7" disabled>v7 · full accuracy, needs the models (not available yet)</option>
         </select>
       </label>
       <p class="callout">
-        v3 works on colour and edges. White-bordered prints on a white lid can come out a little loose; the box may take
-        in some of the border. Check those against the preview.
+        <template v-if="state.settings.mode === 'v3'">
+          v3 works on colour and edges only. On white-bordered prints the box can run out onto the border or its shadow.
+        </template>
+        <template v-else>
+          v7-lite takes v3's boxes and moves each side onto the photograph's own edge when it finds a clear border. It can
+          still miss or merge prints; the full v7 will need the models.
+        </template>
       </p>
 
       <div class="grid2">
