@@ -15,9 +15,11 @@ import {
   exportableCount,
   initApp,
   redetect,
+  redo,
   selectedScan,
   state,
   step,
+  undo,
   updateBoxes,
 } from "./store";
 
@@ -97,6 +99,8 @@ onBeforeUnmount(() => unlisten?.());
       @step="step"
       @edit="selectedScan && updateBoxes(selectedScan, $event)"
       @redetect="selectedScan && redetect(selectedScan)"
+      @undo="selectedScan && undo(selectedScan)"
+      @redo="selectedScan && redo(selectedScan)"
     />
 
     <SidePanel />

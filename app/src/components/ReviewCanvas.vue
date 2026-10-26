@@ -10,6 +10,8 @@ const emit = defineEmits<{
   step: [delta: number];
   edit: [boxes: BoxItem[]];
   redetect: [];
+  undo: [];
+  redo: [];
 }>();
 
 const ACCENT = "#e8703a";
@@ -217,6 +219,23 @@ function drawLoupe(target: Rect, corner: string, event?: Event) {
   loupeVisible.value = true;
 }
 
+/** A handle or box is being dragged; Fabric must not be rebuilt under it. */
+let transforming = false;
+
+/** Show other boxes (after undo or redo) without reloading the image. Keeps the selection if the box survives. */
+function applyBoxes() {
+  if (!canvas || !props.scan || !previewImage || transforming) return;
+  const selected = selectedMarquees().map((m) => ids.get(m));
+  canvas.discardActiveObject();
+  canvas.remove(...marquees());
+  const added = props.scan.boxes.map(makeMarquee);
+  canvas.add(...added);
+  const keep = added.find((m) => selected.includes(ids.get(m)));
+  if (keep) canvas.setActiveObject(keep);
+  restyle();
+  syncState();
+}
+
 function fit() {
   if (!canvas || !props.scan || props.scan.width === 0) return;
   const { width, height } = props.scan;
@@ -336,9 +355,20 @@ function straighten() {
 }
 
 function onKey(event: KeyboardEvent) {
-  if (!props.keysEnabled || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (!props.keysEnabled || event.altKey) return;
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+  if (event.ctrlKey || event.metaKey) {
+    const key = event.key.toLowerCase();
+    const wantsUndo = key === "z" && !event.shiftKey;
+    const wantsRedo = key === "y" || (key === "z" && event.shiftKey);
+    if (!wantsUndo && !wantsRedo) return;
+    event.preventDefault();
+    if (transforming) return;
+    if (wantsUndo) emit("undo");
+    else emit("redo");
+    return;
+  }
   switch (event.key) {
     case "Enter":
       emit("approve");
@@ -380,8 +410,10 @@ onMounted(() => {
     hideLoupe();
     syncState();
   });
+  canvas.on("before:transform", () => (transforming = true));
   canvas.on("object:modified", () => {
     hideLoupe();
+    transforming = false;
     commit();
   });
 
@@ -422,6 +454,7 @@ onMounted(() => {
   canvas.on("mouse:up", () => {
     panning = false;
     hideLoupe();
+    transforming = false;
     canvas!.setViewportTransform(canvas!.viewportTransform);
   });
 
@@ -444,6 +477,8 @@ onBeforeUnmount(() => {
 
 // Rebuild when another scan is chosen or detection replaced its boxes.
 watch(() => [props.scan?.id, props.scan?.revision, props.scan?.width], () => void rebuild());
+// Undo or redo put other boxes back.
+watch(() => props.scan?.epoch, applyBoxes);
 // Re-colour boxes as warnings come and go.
 watch(() => props.scan?.flags, restyle, { deep: true });
 </script>
@@ -452,6 +487,12 @@ watch(() => props.scan?.flags, restyle, { deep: true });
   <section class="review">
     <header class="toolbar">
       <div class="group">
+        <button class="btn" :disabled="!scan?.history.canUndo" title="Undo (Ctrl+Z)" @click="emit('undo')">
+          Undo
+        </button>
+        <button class="btn" :disabled="!scan?.history.canRedo" title="Redo (Ctrl+Y or Ctrl+Shift+Z)" @click="emit('redo')">
+          Redo
+        </button>
         <button class="btn" :disabled="!ready" title="Add a box" @click="addBox">+ Box</button>
         <button class="btn" :disabled="!hasSelection" title="Split the selected box in half" @click="splitSelected">
           Split

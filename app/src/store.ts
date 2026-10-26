@@ -3,6 +3,7 @@
 import { computed, reactive, watch } from "vue";
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
+import { History, sameBoxes } from "./history";
 
 export type ScanStatus = "queued" | "detecting" | "pending" | "flagged" | "approved" | "error";
 
@@ -21,7 +22,14 @@ export interface ScanItem {
   error: string | null;
   /** Bumped when the boxes are replaced from outside (detection), so the canvas rebuilds. */
   revision: number;
+  /** Earlier and later states of `boxes` for undo and redo. Lives as long as the scan is in the list. */
+  history: History<BoxItem[]>;
+  /** Bumped when undo or redo puts boxes back, so the canvas swaps them without reloading the image. */
+  epoch: number;
 }
+
+/** A copy that later edits cannot change. */
+const snapshot = (boxes: BoxItem[]): BoxItem[] => boxes.map((box) => ({ ...box }));
 
 export const FLAG_LABELS: Record<Flag["code"], string> = {
   no_boxes: "No item found",
@@ -133,9 +141,12 @@ async function settleDetected(scan: ScanItem) {
 }
 
 function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis) {
+  // A scan detected before is being detected again: its old boxes stay one undo away.
+  const detectedBefore = scan.width > 0;
   scan.width = analysis.width;
   scan.height = analysis.height;
   scan.thumbnail = analysis.thumbnail;
+  if (detectedBefore) scan.history.record(snapshot(scan.boxes));
   scan.boxes = analysis.boxes.map(withId);
   scan.error = null;
   scan.revision++;
@@ -224,6 +235,8 @@ function makeScan(path: string): ScanItem {
     status: "queued",
     error: null,
     revision: 0,
+    history: new History<BoxItem[]>(),
+    epoch: 0,
   };
 }
 
@@ -291,6 +304,29 @@ const editTimers = new Map<number, number>();
 
 /** The user changed boxes on the canvas. */
 export function updateBoxes(scan: ScanItem, boxes: BoxItem[]) {
+  if (!sameBoxes(scan.boxes, boxes)) scan.history.record(snapshot(scan.boxes));
+  setBoxes(scan, boxes);
+}
+
+/** Undo the last box edit on this scan. */
+export function undo(scan: ScanItem) {
+  const before = scan.history.undo(snapshot(scan.boxes));
+  if (before) restoreBoxes(scan, before);
+}
+
+/** Redo what was undone on this scan. */
+export function redo(scan: ScanItem) {
+  const after = scan.history.redo(snapshot(scan.boxes));
+  if (after) restoreBoxes(scan, after);
+}
+
+function restoreBoxes(scan: ScanItem, boxes: BoxItem[]) {
+  setBoxes(scan, boxes);
+  scan.epoch++; // tells the canvas to show them
+}
+
+/** Make `boxes` the scan's boxes and re-check them. */
+function setBoxes(scan: ScanItem, boxes: BoxItem[]) {
   scan.boxes = boxes;
   scan.status = scan.status === "approved" ? "pending" : scan.status; // an edit needs a fresh OK
   window.clearTimeout(editTimers.get(scan.id));
