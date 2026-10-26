@@ -69,6 +69,16 @@ Goal: `oxicut detect scan.jpg --mode v3 --debug out/` writes `boxes.json` (rotat
 - [x] **Done when:** v3 boxes within ±2 px / ±0.5° of Python v3 on the synthetic fixtures; `cargo clippy` clean; unit tests for Lab background model, gutter split, edge snap. _(Met on 111 of 114 fixtures with identical pixels; all 114 give the same box count. The three misses and the JPEG-decoder caveat are in `docs/detector-v7-port.md`. Clippy clean, 118 tests.)_
 - [x] Commit + `docs/PROGRESS.md` entry.
 
+## Milestone: first manually testable app (v3 detector)
+
+Reprioritised 2026-10-26 at the user's request: connect the app to the working v3 engine before building v5/v7, so it can be tried by hand on real scans. This pulls the usable parts of Phases 3 and 4 forward; the model-based detectors follow in Phase 2. Out of scope for this milestone: projects/pairing (Phase 5), DPI/EXIF passthrough, v5/v7.
+
+- [x] Shared export code (`oxicut-core::export`: formats, `{source}-{n}` patterns, Windows-safe names, never overwrites, source scan protected) and ScanSplitter's scan flags (`oxicut-core::flags`).
+- [x] App backend (`app/src-tauri`): detect in a thread pool with per-scan progress events and cancel, thumbnails and a preview cache, flags, export, settings file, model status and download. Logic is in plain modules with tests; the Tauri commands only wrap them.
+- [x] Frontend wired to it: add scans (dialog, folder, drag and drop, command line), live queue with thumbnails, review canvas on the real scan with editable boxes, warnings, auto-approve, export panel, real model manager.
+- [x] Verified by running the app on real scans (6 files incl. a 16-bit TIFF): detect, approve, export (20 images; 16-bit stays 16-bit). Feedback from hand testing: boxes inset (fixed: default trim is now 0) and loose on white borders/shadows (needs v7's inner-edge tightening, next).
+- [x] Tester notes written (`docs/TESTING.md`): what to try and what is known to be missing.
+
 ## Phase 2: Model registry, MobileSAM via `ort`, v5, v7, benchmark
 
 - [x] `oxicut-models` **registry** (`ModelSpec { id, label, filename, urls, sha256, approx_bytes }`). URLs, pinned Hugging Face revision and SHA-256 values copied from ScanSplitter's `models.py`; includes the orientation model for later. _(Exact sizes still to fill in after the first real download.)_

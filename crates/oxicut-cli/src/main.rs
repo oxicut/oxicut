@@ -51,8 +51,9 @@ struct DetectArgs {
     /// Largest accepted print, as a percentage of the scan's area.
     #[arg(long, default_value_t = 80.0)]
     max_area: f64,
-    /// Pixels trimmed from every side of each box (removes the soft print edge).
-    #[arg(long, default_value_t = 10)]
+    /// Pixels trimmed from every side of each box. 0 matches the printed photo's
+    /// edge best; ScanSplitter's own default of 10 shrinks every box.
+    #[arg(long, default_value_t = 0)]
     inset: i32,
     /// Pixels added around every box.
     #[arg(long, default_value_t = 0)]

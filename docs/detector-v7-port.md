@@ -66,3 +66,12 @@ _Not started._
 ## v7
 
 _Not started._
+
+## Accuracy against ground truth (v3)
+
+ScanSplitter ships ground-truth boxes (`benchmarks/manifest.json`; target = "inner photographic image area; exclude paper borders, tape, corners, shadows"). Measured on `scansplitter-05` (six prints on an album spread), our v3 equals Python's v3, and:
+
+- **Inset.** ScanSplitter's default of 10 px per side makes every box about 18 px too small in width or height. With inset 0, the boxes that are found correctly are within about 2 px of the truth. OxiCut therefore defaults to 0 (the library `DetectOptions` default stays 10 for parity with the port tests).
+- **Border and shadow.** On four of the six prints v3 puts the right edge about 21 px too far out (and on one print the bottom edge about 29 px), because the side refinement locks onto the outer paper edge or its drop shadow. This is the white-border case the plan calls out, and it is what v7's per-side inner-edge tightening is for. It is a property of v3, not of the port.
+
+Reproduce with `oxicut detect <scan> --inset 0` and the manifest's rectangles.

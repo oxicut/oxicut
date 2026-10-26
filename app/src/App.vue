@@ -1,10 +1,25 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
 import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
-import { MODELS, mockScans } from "./mock";
+import {
+  addPaths,
+  addScansFromDialog,
+  approve,
+  approvedCount,
+  cancelDetection,
+  exportApproved,
+  exportableCount,
+  initApp,
+  redetect,
+  selectedScan,
+  state,
+  step,
+  updateBoxes,
+} from "./store";
 
 const WELCOME_KEY = "oxicut.welcomeSeen";
 
@@ -16,34 +31,9 @@ function welcomeSeen(): boolean {
   }
 }
 
-const scans = ref(mockScans());
-const selectedId = ref(scans.value[0].id);
 const showWelcome = ref(!welcomeSeen());
-const installed = ref(new Set<string>());
-const notice = ref("");
-let noticeTimer: number | undefined;
-
-const selected = computed(() => scans.value.find((s) => s.id === selectedId.value) ?? scans.value[0]);
-const approvedCount = computed(() => scans.value.filter((s) => s.status === "approved").length);
-const modelsReady = computed(() => MODELS.every((m) => installed.value.has(m.id)));
-
-function say(message: string) {
-  notice.value = message;
-  window.clearTimeout(noticeTimer);
-  noticeTimer = window.setTimeout(() => (notice.value = ""), 4000);
-}
-onBeforeUnmount(() => window.clearTimeout(noticeTimer));
-
-function step(delta: number) {
-  const index = scans.value.findIndex((s) => s.id === selectedId.value);
-  const next = scans.value[index + delta];
-  if (next) selectedId.value = next.id;
-}
-
-function approveAndAdvance() {
-  selected.value.status = "approved";
-  step(1);
-}
+const dragging = ref(false);
+let unlisten: (() => void) | undefined;
 
 function closeWelcome() {
   showWelcome.value = false;
@@ -54,50 +44,74 @@ function closeWelcome() {
   }
 }
 
-function markInstalled(id: string) {
-  installed.value = new Set(installed.value).add(id);
+function addFromWelcome() {
+  closeWelcome();
+  void addScansFromDialog();
 }
 
-function downloadAllFromWelcome() {
-  closeWelcome();
-  say("Open Models in the right panel to follow the download.");
+function approveAndAdvance() {
+  if (!selectedScan.value) return;
+  approve(selectedScan.value);
+  step(1);
 }
+
+onMounted(async () => {
+  // Files dropped from Explorer arrive with their real paths.
+  unlisten = await getCurrentWebview().onDragDropEvent((event) => {
+    const payload = event.payload;
+    if (payload.type === "enter" || payload.type === "over") dragging.value = true;
+    else if (payload.type === "leave") dragging.value = false;
+    else if (payload.type === "drop") {
+      dragging.value = false;
+      void addPaths(payload.paths);
+    }
+  });
+  void initApp();
+});
+
+onBeforeUnmount(() => unlisten?.());
 </script>
 
 <template>
   <div class="app">
     <header class="top">
       <div class="brand">Oxi<span>Cut</span></div>
-      <span class="chip" :class="modelsReady ? 'ok' : 'warn'">
-        {{ modelsReady ? "Models ready" : "Fast mode (models not downloaded)" }}
-      </span>
+      <span class="chip">Detector v3</span>
       <span class="grow"></span>
-      <span class="chip accent">UI preview · sample data</span>
-      <button class="btn" @click="say('Batch detection is not wired up yet (UI preview).')">Detect all</button>
-      <button class="btn primary" @click="say('Export is not wired up yet (UI preview).')">
-        Export approved ({{ approvedCount }})
+      <template v-if="state.detect.active">
+        <span class="muted small">Detecting {{ state.detect.done }} of {{ state.detect.total }}…</span>
+        <div class="mini-bar"><div :style="{ width: `${(state.detect.done / Math.max(1, state.detect.total)) * 100}%` }"></div></div>
+        <button class="btn" @click="cancelDetection">Cancel</button>
+      </template>
+      <button class="btn primary" :disabled="state.exporting.active || !exportableCount" @click="exportApproved">
+        {{ state.exporting.active ? `Exporting ${state.exporting.done} of ${state.exporting.total}…` : `Export approved (${exportableCount})` }}
       </button>
     </header>
 
-    <ScanQueue :scans="scans" :selected-id="selectedId" @select="selectedId = $event" @notice="say" />
+    <ScanQueue />
 
     <ReviewCanvas
-      :scan="selected"
+      :scan="selectedScan"
       :keys-enabled="!showWelcome"
       @approve="approveAndAdvance"
       @step="step"
-      @notice="say"
+      @edit="selectedScan && updateBoxes(selectedScan, $event)"
+      @redetect="selectedScan && redetect(selectedScan)"
     />
 
-    <SidePanel :installed="installed" @download="markInstalled" @notice="say" />
+    <SidePanel />
 
     <footer class="status">
-      <span>{{ notice || "Ready" }}</span>
+      <span class="message">{{ state.notice || "Ready" }}</span>
       <span class="grow"></span>
-      <span class="muted">{{ scans.length }} scans · {{ approvedCount }} approved</span>
+      <span class="muted">{{ state.scans.length }} scans · {{ approvedCount }} approved</span>
     </footer>
 
-    <WelcomeDialog v-if="showWelcome" @download-models="downloadAllFromWelcome" @skip="closeWelcome" />
+    <div v-if="dragging" class="drop" aria-hidden="true">
+      <div>Drop scans or a folder to add them</div>
+    </div>
+
+    <WelcomeDialog v-if="showWelcome" @add-scans="addFromWelcome" @close="closeWelcome" />
   </div>
 </template>
 
@@ -132,6 +146,21 @@ function downloadAllFromWelcome() {
 .grow {
   flex: 1;
 }
+.small {
+  font-size: 12px;
+}
+.mini-bar {
+  width: 120px;
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.mini-bar div {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s;
+}
 .status {
   grid-area: status;
   display: flex;
@@ -141,6 +170,11 @@ function downloadAllFromWelcome() {
   border-top: 1px solid var(--border);
   font-size: 12px;
 }
+.message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .app > :nth-child(2) {
   grid-area: queue;
 }
@@ -149,5 +183,21 @@ function downloadAllFromWelcome() {
 }
 .app > :nth-child(4) {
   grid-area: panel;
+}
+.drop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  z-index: 20;
+  pointer-events: none;
+}
+.drop div {
+  padding: 1.5rem 2.5rem;
+  border: 2px dashed var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 16px;
 }
 </style>

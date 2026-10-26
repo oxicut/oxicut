@@ -1,25 +1,20 @@
 <script setup lang="ts">
-import { MODELS } from "../mock";
-
-const emit = defineEmits<{ downloadModels: []; skip: [] }>();
-const totalMb = MODELS.reduce((sum, m) => sum + m.sizeMb, 0);
+const emit = defineEmits<{ addScans: []; close: [] }>();
 </script>
 
 <template>
   <div class="backdrop">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
       <h1 id="welcome-title">Welcome to Oxi<span>Cut</span></h1>
-      <p>
-        OxiCut splits scanned prints and postcards into separate, straightened images. Add a batch of scans, let it find
-        each item, and fix any box that looks off.
-      </p>
-      <p>
-        The most accurate detection mode uses the MobileSAM model (<strong>{{ totalMb }} MB</strong>, downloaded once).
-        You can start right away with the built-in fast mode and add it later.
-      </p>
+      <p>OxiCut splits flatbed scans of photo prints and postcards into separate, straightened images.</p>
+      <ol>
+        <li><strong>Add</strong> scans or a whole folder: use the button, or drop them on the window.</li>
+        <li><strong>Check</strong> the boxes OxiCut drew. Drag, resize or rotate any of them; <kbd>Enter</kbd> approves and moves on. Scans with nothing suspicious are approved for you.</li>
+        <li><strong>Export</strong> the approved scans. Your originals are never changed.</li>
+      </ol>
       <div class="actions">
-        <button class="btn primary" @click="emit('downloadModels')">Download models ({{ totalMb }} MB)</button>
-        <button class="btn" @click="emit('skip')">Continue with fast mode</button>
+        <button class="btn primary" @click="emit('addScans')">Add scans…</button>
+        <button class="btn" @click="emit('close')">Got it</button>
       </div>
     </div>
   </div>
@@ -36,7 +31,7 @@ const totalMb = MODELS.reduce((sum, m) => sum + m.sizeMb, 0);
   z-index: 10;
 }
 .dialog {
-  max-width: 460px;
+  max-width: 480px;
   padding: 1.75rem;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -51,10 +46,19 @@ h1 {
 h1 span {
   color: var(--accent);
 }
-p {
+p,
+ol {
   margin: 0 0 0.9rem;
   line-height: 1.55;
   color: var(--muted);
+}
+ol {
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.5rem;
+}
+strong {
+  color: var(--text);
 }
 .actions {
   display: flex;
