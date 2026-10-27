@@ -21,7 +21,8 @@ const v7Ready = () =>
   state.models.filter((m) => m.id.startsWith("mobilesam")).length > 0 &&
   state.models.filter((m) => m.id.startsWith("mobilesam")).every((m) => m.state === "ready");
 
-const modelNeedsDownload = () => state.models.some((m) => m.state !== "ready");
+// The orientation model is not offered yet, so it must not keep the button around.
+const modelNeedsDownload = () => state.models.some((m) => m.id !== "orientation" && m.state !== "ready");
 const downloading = () => Object.keys(state.modelProgress).length > 0;
 
 function percent(id: string): number {
@@ -227,6 +228,7 @@ const openModelsFolder = () =>
 }
 .body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 0.9rem;
   flex: 1;
@@ -320,6 +322,7 @@ const openModelsFolder = () =>
   transition: width 0.12s linear;
 }
 .path {
+  min-width: 0;
   font: 11px "Cascadia Mono", Consolas, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
