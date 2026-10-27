@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { Canvas, FabricImage, Point, Rect, util } from "fabric";
-import { boxCorners, handlePoint, sourceSquare } from "../loupe";
+import {
+  boxCorners,
+  cornerPlaces,
+  handlePoint,
+  sourceSquare,
+  type LoupeBox,
+  type LoupePlace,
+  type Point2,
+} from "../loupe";
 import { FLAG_LABELS, newBoxId, previewFor, type BoxItem, type ScanItem } from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
@@ -100,58 +108,60 @@ function commit() {
 
 // ------------------------------------------------------------------- loupe
 
-/** Edge of the round magnifier, in CSS pixels. */
+/** Edge of the round magnifier that follows a resize handle, in CSS pixels. */
 const LOUPE_SIZE = 168;
+/** Edge of each of the four loupes shown while moving or rotating (smaller, so four fit a narrow stage). */
+const CORNER_LOUPE_SIZE = 136;
 /** How much larger than the main view the loupe shows the scan (never below 1 screen pixel per scan pixel). */
 const LOUPE_MAGNIFY = 4;
 
-const loupeEl = ref<HTMLCanvasElement>();
-const loupeVisible = ref(false);
-const loupePlace = ref("top-right");
+/** Four loupe surfaces: resizing uses the first, moving and rotating use all of them. */
+const loupeEls = ref<HTMLCanvasElement[]>([]);
+/** Which stage corner each loupe sits in, or null while it is hidden. */
+const loupePlaces = ref<(LoupePlace | null)[]>([null, null, null, null]);
+const loupeSize = ref(LOUPE_SIZE);
 let previewImage: FabricImage | undefined;
 
 function hideLoupe() {
-  loupeVisible.value = false;
+  loupePlaces.value = [null, null, null, null];
 }
 
+const targetBox = (target: Rect): LoupeBox => ({
+  cx: target.left,
+  cy: target.top,
+  w: target.width * target.scaleX,
+  h: target.height * target.scaleY,
+  angle: target.angle,
+});
+
 /**
- * Magnify the scan around the handle being dragged and draw the box over it. The loupe sits in the
- * stage corner away from the pointer, so it never covers what is being placed.
+ * Magnify the scan around `centre` onto `surface` (`size` CSS pixels wide), draw the box over it and
+ * put a crosshair on the centre. Returns false if there is nothing to draw on.
  */
-function drawLoupe(target: Rect, corner: string, event?: Event) {
-  const surface = loupeEl.value;
+function paintLoupe(surface: HTMLCanvasElement, size: number, centre: Point2, box: LoupeBox, flagged: boolean): boolean {
   const image = previewImage;
   const scan = props.scan;
-  if (!canvas || !surface || !image || !scan || !host.value) return;
-  const box = {
-    cx: target.left,
-    cy: target.top,
-    w: target.width * target.scaleX,
-    h: target.height * target.scaleY,
-    angle: target.angle,
-  };
-  const centre = handlePoint(box, corner);
   const context = surface.getContext("2d");
-  if (!centre || !context) return hideLoupe();
+  if (!canvas || !image || !scan || !host.value || !context) return false;
 
   const ratio = window.devicePixelRatio || 1;
-  const pixels = Math.round(LOUPE_SIZE * ratio);
+  const pixels = Math.round(size * ratio);
   if (surface.width !== pixels) {
     surface.width = pixels;
     surface.height = pixels;
   }
   const magnify = Math.max(1, canvas.getZoom() * LOUPE_MAGNIFY);
-  const square = sourceSquare(centre, LOUPE_SIZE, magnify);
+  const square = sourceSquare(centre, size, magnify);
   const toLoupe = (p: { x: number; y: number }) => ({ x: (p.x - square.x) * magnify, y: (p.y - square.y) * magnify });
 
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
-  context.clearRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
+  context.clearRect(0, 0, size, size);
   context.save();
   context.beginPath();
-  context.arc(LOUPE_SIZE / 2, LOUPE_SIZE / 2, LOUPE_SIZE / 2, 0, Math.PI * 2);
+  context.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
   context.clip();
   context.fillStyle = getComputedStyle(host.value).getPropertyValue("--stage").trim() || "#888";
-  context.fillRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
+  context.fillRect(0, 0, size, size);
 
   // The part of the square that lies on the scan; the rest stays stage-coloured.
   const k = image.width / scan.width;
@@ -175,7 +185,6 @@ function drawLoupe(target: Rect, corner: string, event?: Event) {
     );
   }
 
-  const warn = (scan.flags ?? []).some((f) => f.boxId === ids.get(target));
   const outline = boxCorners(box).map(toLoupe);
   context.beginPath();
   outline.forEach((p, i) => (i ? context.lineTo(p.x, p.y) : context.moveTo(p.x, p.y)));
@@ -183,11 +192,11 @@ function drawLoupe(target: Rect, corner: string, event?: Event) {
   context.fillStyle = "rgba(232, 112, 58, 0.12)";
   context.fill();
   context.lineWidth = 2;
-  context.strokeStyle = warn ? WARNING : ACCENT;
+  context.strokeStyle = flagged ? WARNING : ACCENT;
   context.stroke();
 
-  // Crosshair with a gap, so the pixel under the handle stays visible.
-  const mid = LOUPE_SIZE / 2;
+  // Crosshair with a gap, so the pixel under the point stays visible.
+  const mid = size / 2;
   const gap = 5;
   const reach = 16;
   for (const [width, colour] of [
@@ -208,15 +217,50 @@ function drawLoupe(target: Rect, corner: string, event?: Event) {
     context.stroke();
   }
   context.restore();
+  return true;
+}
 
+const isFlagged = (target: Rect) => (props.scan?.flags ?? []).some((f) => f.boxId === ids.get(target));
+
+/**
+ * Magnify the scan around the resize handle being dragged. The loupe sits in the stage corner away
+ * from the pointer, so it never covers what is being placed.
+ */
+function drawLoupe(target: Rect, corner: string, event?: Event) {
+  const surface = loupeEls.value[0];
+  const box = targetBox(target);
+  const centre = handlePoint(box, corner);
+  if (!surface || !host.value || !centre) return hideLoupe();
+  loupeSize.value = LOUPE_SIZE;
+  if (!paintLoupe(surface, LOUPE_SIZE, centre, box, isFlagged(target))) return hideLoupe();
+
+  let place = loupePlaces.value[0] ?? "top-right";
   const pointer = event as MouseEvent | undefined;
   if (pointer && typeof pointer.clientX === "number") {
     const bounds = host.value.getBoundingClientRect();
     const vertical = pointer.clientY - bounds.top < LOUPE_SIZE + 40 ? "bottom" : "top";
     const horizontal = pointer.clientX - bounds.left < bounds.width / 2 ? "right" : "left";
-    loupePlace.value = `${vertical}-${horizontal}`;
+    place = `${vertical}-${horizontal}` as LoupePlace;
   }
-  loupeVisible.value = true;
+  loupePlaces.value = [place, null, null, null];
+}
+
+/**
+ * While a box is moved or turned, magnify each of its four corners at once so any of them can be
+ * aligned. Each loupe sits in the stage corner that matches where its box corner is on screen.
+ */
+function drawCornerLoupes(target: Rect) {
+  if (!canvas) return;
+  const box = targetBox(target);
+  const corners = boxCorners(box);
+  const [zoom, , , , x0, y0] = canvas.viewportTransform;
+  const places = cornerPlaces(corners.map((c) => ({ x: c.x * zoom + x0, y: c.y * zoom + y0 })));
+  loupeSize.value = CORNER_LOUPE_SIZE;
+  const flagged = isFlagged(target);
+  loupePlaces.value = corners.map((corner, i) => {
+    const surface = loupeEls.value[i];
+    return surface && paintLoupe(surface, CORNER_LOUPE_SIZE, corner, box, flagged) ? places[i] : null;
+  });
 }
 
 /** A handle or box is being dragged; Fabric must not be rebuilt under it. */
@@ -427,9 +471,15 @@ onMounted(() => {
     if (corner && ids.has(opt.target)) drawLoupe(opt.target as Rect, corner, opt.e);
   });
 
+  // Moving or turning a box magnifies all four of its corners, so any of them can be aligned.
+  canvas.on("object:moving", (opt) => {
+    if (ids.has(opt.target)) drawCornerLoupes(opt.target as Rect);
+  });
+
   // Hold Shift while rotating to snap to 0/90/180/270.
   canvas.on("object:rotating", (opt) => {
     if ((opt.e as MouseEvent).shiftKey) opt.target.set("angle", Math.round(opt.target.angle / 90) * 90);
+    if (ids.has(opt.target)) drawCornerLoupes(opt.target as Rect);
   });
 
   canvas.on("mouse:wheel", (opt) => {
@@ -544,11 +594,13 @@ watch(() => props.scan?.flags, restyle, { deep: true });
       <div ref="host" class="stage">
         <canvas ref="el"></canvas>
         <canvas
-          v-show="loupeVisible"
-          ref="loupeEl"
+          v-for="(place, i) in loupePlaces"
+          :key="i"
+          v-show="place"
+          :ref="(surface) => (loupeEls[i] = surface as HTMLCanvasElement)"
           class="loupe"
-          :class="loupePlace"
-          :style="{ width: `${LOUPE_SIZE}px`, height: `${LOUPE_SIZE}px` }"
+          :class="place"
+          :style="{ width: `${loupeSize}px`, height: `${loupeSize}px` }"
           aria-hidden="true"
         ></canvas>
         <div v-if="!scan" class="overlay">

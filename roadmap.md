@@ -119,7 +119,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 - [ ] Per-scan Vue view: scan on a Fabric.js canvas, one rotatable/resizable rect per box.
 - [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0° with a modifier key, zoom/pan.
-- [x] Loupe: while a resize handle is dragged, a round magnifier (4x the current zoom, drawn from the preview) shows the area around it with the box outline and a crosshair, placed away from the pointer.
+- [x] Loupe: while a resize handle is dragged, a round magnifier (4x the current zoom, drawn from the preview) shows the area around it with the box outline and a crosshair, placed away from the pointer. While a box is moved or rotated, four smaller loupes show all four of its corners at once, each in the stage corner that matches where the box corner is on screen.
 - [x] Undo / redo per scan (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, toolbar buttons): every box edit is one step, Re-detect is undoable, history lives while the scan is in the list.
 - [x] Closing guard: closing the window warns about approved-but-unexported scans, edits after export, edits that were not approved, and a running export (`closeGuard.ts`, `CloseDialog.vue`); unsaved settings are flushed on close. Revisit when Phase 5 persists projects.
 - [x] Collapsible scan list and side panel (Ctrl+B, Ctrl+Shift+B): slim rails keep the approved count, the to-review count, per-scan status thumbnails, the detector, the export format and a missing-models warning in view; the layout is remembered and a zoomed-in view survives a collapse.
