@@ -85,15 +85,15 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [x] Storage in `%APPDATA%\oxicut\models\` (`directories::BaseDirs` data dir + `oxicut/models`, override with `OXICUT_MODELS_DIR`). Shared by the CLI and the app; deliberately not Tauri's `app_data_dir`, which would be a different folder.
 - [x] `ensure_model(dir, spec, progress)`: verify existing file, else stream to `.part`, verify SHA-256, atomic rename; tries mirrors in order; a corrupt file is deleted and re-fetched. Never returns a file that fails the checksum. _(8 tests against a local fake HTTP server. HTTPS via `reqwest` + `native-tls` = Windows Schannel, so no C/C++ build.)_
 - [x] CLI: `oxicut models status|download|verify|path`.
-- [~] Offline / failed download: the app shows the error per model and keeps v3/v7-lite working; choosing v7 without the models gives a clear per-scan error (no silent fallback).
+- [x] Offline / failed download: the app shows the error per model (with the cause, e.g. "connection refused") and keeps v3/v7-lite working; choosing v7 without the models gives a clear per-scan error (no silent fallback), and the Detection tab warns when v7 is selected but the models are missing. _(Checked with a dead proxy and an empty folder: no `.part` left behind.)_
 - [x] **MobileSAM inference** via `ort` 2.0.0-rc.15 (`sam.rs`): INTER_AREA shrink to 1024 px, raw float RGB into the encoder, box prompts (labels 2, 3) into the decoder, embedding computed once per scan. Matches onnxruntime in Python: embedding to 1e-5, mask pixel counts within 3, refined rectangles IoU 1.0 (`golden_sam.rs`).
 - [x] Port **v5** (`v5.rs`): v3/MobileSAM anchors, texture pass, closed-frame pass (needs `find_all_contours`, Suzuki-Abe), texture-island splitting, stacked-sleeve expansion, tightly prompted segmentation near scan edges. Not exposed on its own; v7 contains it.
 - [x] Port **v7**: v5 anchors; v3, colour-capped v3 and chroma alternative proposals scored by boundary brightness step; ghost rejection; per-side tightening. `golden_v7_full.rs` compares every stage over 114 fixtures: 110-114 identical per stage (the rest are v3 edge cases).
 - [x] Detector choice exposed in the CLI (`--mode v7`) and the app (v7 enabled once the models are downloaded; a clear error if they are missing). _v5 alone is not exposed: v7 supersedes it._
 - [x] `oxicut bench` (scoring and CLI done, reproduces ScanSplitter's v3 numbers, see port notes): port `benchmarks/evaluate.py` semantics (rotated-box Hungarian matching, box quality, F1@0.50, F1@0.85, count accuracy) on `benchmarks/robustness/` fixtures plus real scans kept outside the repo. A/B against `uv run scansplitter process`.
-- [ ] Check the white-lid acceptance cases (see below) on real scans.
-- [ ] **Done when:** `oxicut bench` v7 box quality within ~3 points of Python v7 on the same fixtures; on a clean machine `oxicut models download` fetches, verifies and loads both MobileSAM files; a corrupted file is detected and re-fetched.
-- [ ] Commit + `docs/PROGRESS.md` entry.
+- [~] Check the white-lid acceptance cases (see below) on real scans. _(Checked on public stand-ins: right counts, boxes on the photo not the cream border. Still to do on the user's own white-lid Epson scans.)_
+- [x] **Done when:** `oxicut bench` v7 box quality within ~3 points of Python v7 on the same fixtures; on a clean machine `oxicut models download` fetches, verifies and loads both MobileSAM files; a corrupted file is detected and re-fetched.
+- [x] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 3: Tauri 2 shell (batch / auto mode)
 

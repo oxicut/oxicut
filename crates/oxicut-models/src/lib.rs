@@ -206,6 +206,22 @@ pub fn ensure_model(
     })
 }
 
+/// An error with its causes appended. reqwest's own text stops at "error sending request",
+/// which hides whether the connection was refused, the name did not resolve or TLS failed.
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        let part = cause.to_string();
+        if !text.contains(&part) {
+            text.push_str(": ");
+            text.push_str(&part);
+        }
+        source = cause.source();
+    }
+    text
+}
+
 /// Download one URL to `dest` via `dest.part`, checking the hash before the rename.
 fn fetch(
     url: &str,
@@ -238,8 +254,8 @@ fn fetch_into(
         // Overall limit: a stalled connection must not hang the app for ever.
         .timeout(Duration::from_secs(60 * 15))
         .build()
-        .map_err(|e| e.to_string())?;
-    let mut response = client.get(url).send().map_err(|e| e.to_string())?;
+        .map_err(|e| error_chain(&e))?;
+    let mut response = client.get(url).send().map_err(|e| error_chain(&e))?;
     if !response.status().is_success() {
         return Err(format!("server answered {}", response.status()));
     }
@@ -251,7 +267,7 @@ fn fetch_into(
     let mut buffer = vec![0u8; 256 * 1024];
     let mut downloaded = 0u64;
     loop {
-        let read = response.read(&mut buffer).map_err(|e| e.to_string())?;
+        let read = response.read(&mut buffer).map_err(|e| error_chain(&e))?;
         if read == 0 {
             break;
         }

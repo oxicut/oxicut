@@ -62,3 +62,17 @@ Benchmark at a 0 px trim (`oxicut bench --mode v7`):
 ScanSplitter publishes 88.8% box quality for v7 on the holdout set; v3 at the same trim gets 79.0%. On the hand-test scans v7 found the prints v7-lite missed: 5 instead of 4 on `scansplitter-03` and on the 16-bit Epson TIFF. A whole album page (`album-07`) is still one box, as in ScanSplitter.
 
 Practical notes: `ort` 2.0.0-rc.15 has one `Environment` per process and sessions need `&mut` to run, so each worker thread keeps its own `MobileSam` (`sam::with_thread_sam`); the app uses two workers for v7. ONNX Runtime is linked statically, so the exe needs no extra DLL. v7 takes about 3 s per scan on this machine.
+
+## Phase 2 close-out (2026-10-27)
+
+Checked on a clean models folder (`OXICUT_MODELS_DIR` pointing at an empty folder):
+
+| Check | Result |
+|---|---|
+| `oxicut models download`, then `verify` | both MobileSAM files fetched, checksums pass, `detect --mode v7` loads them (5 prints on `scansplitter-03`) |
+| One byte flipped in the encoder, decoder cut to 5 MB | `verify` names both DAMAGED and exits 1; `download` deletes and re-fetches both; `verify` passes |
+| No network (dead proxy, empty folder) | clear error, no `.part` file left, `--mode v3` still works, `--mode v7` says to run `models download` |
+
+One fix came out of it: download errors only said "error sending request", hiding why. They now carry the cause ("connection refused", and so on). The Detection tab also warns when v7 is selected but the models are missing.
+
+White-lid check on public stand-ins (the user's own scans were not at hand; none of these files are in the repo): three borderless photos on white (`3ladies1-3`, tilted 0 to 10 degrees), a white-bed scan of four cream-bordered prints (cropped from a VueScan screenshot), and a cream album page with four white-bordered prints. v3, v7-lite and v7 all find the right counts; on the cream-bordered prints the box sits on the photograph and not on the border. ScanSplitter v7 finds 4, 3, 3, 3 and 4 on the same files, so ours is not worse. Caveats: the VueScan crop has blue selection boxes drawn on it and the album page has green ones, and neither is a white lid. Still to do on the user's own Epson scans.

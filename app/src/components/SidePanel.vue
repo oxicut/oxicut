@@ -68,6 +68,10 @@ const openModelsFolder = () =>
           still miss or merge prints; v7 (needs the models) is better at counting them.
         </template>
       </p>
+      <p v-if="state.settings.mode === 'v7' && state.models.length && !v7Ready()" class="error-text">
+        The v7 models are missing, so scans will fail with an error.
+        <button class="link" @click="tab = 'models'">Open the Models tab</button> to download them, or pick v7-lite.
+      </p>
 
       <div class="grid2">
         <label class="field">
