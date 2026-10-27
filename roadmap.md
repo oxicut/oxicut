@@ -91,7 +91,17 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [x] Port **v7**: v5 anchors; v3, colour-capped v3 and chroma alternative proposals scored by boundary brightness step; ghost rejection; per-side tightening. `golden_v7_full.rs` compares every stage over 114 fixtures: 110-114 identical per stage (the rest are v3 edge cases).
 - [x] Detector choice exposed in the CLI (`--mode v7`) and the app (v7 enabled once the models are downloaded; a clear error if they are missing). _v5 alone is not exposed: v7 supersedes it._
 - [x] `oxicut bench` (scoring and CLI done, reproduces ScanSplitter's v3 numbers, see port notes): port `benchmarks/evaluate.py` semantics (rotated-box Hungarian matching, box quality, F1@0.50, F1@0.85, count accuracy) on `benchmarks/robustness/` fixtures plus real scans kept outside the repo. A/B against `uv run scansplitter process`.
-- [~] Check the white-lid acceptance cases (see below) on real scans. _(Checked on public stand-ins: right counts, boxes on the photo not the cream border. Still to do on the user's own white-lid Epson scans.)_
+- [~] Check the white-lid acceptance cases (see below) on real scans. _(Checked on public stand-ins: right counts, boxes on the photo not the cream border. Still to do on the user's own white-lid Epson scans, listed here.)_
+  - Scan set to provide (lid closed and white; 300 to 600 dpi; the originals are only read). One file per line, in this order of importance:
+    - [ ] **Edge to edge, several prints**: 3 to 4 borderless photos, a little askew, with clear gaps. The baseline: boxes should sit exactly on the image.
+    - [ ] **White-bordered, several prints**: 3 to 4 prints with white borders, askew, with gaps. The hardest case: the box must land on the photograph, not on the paper, and the prints must still be found at all.
+    - [ ] **Zigzag (deckled) edge, several prints**: 3 to 4 prints with a scalloped border. Check whether the box follows the photo or the scalloped edge, and that the count is right.
+    - [ ] **Postcards**: front and back of the same two or three cards on separate beds, one pair on a white card and one on cream. Cards with a white border on the picture side are the interesting ones; the message side is mostly text and stamps.
+    - [ ] **Touching and near the edge**: two prints placed side by side with no gap, and one print pushed against the glass edge, in one scan. Tests the gutter split and clipping instead of dropping.
+    - [ ] **One print alone**, white-bordered, in a big white bed (single item, lots of empty white).
+    - [ ] **One 16-bit TIFF** of any of the above, to confirm "same format" stays 16-bit.
+  - Skipped on purpose: **polaroids** (none at hand). `robust-holdout-polaroid-01.jpg` stays the only polaroid check; the open question of whether the box should include the white frame is parked until real ones exist.
+  - What I will report per scan: count found against what is on the bed, whether each box lands on the photo, the border or the paper edge, v3 against v7-lite against v7, and the same scan through ScanSplitter so a shared miss is called out as such.
 - [x] **Done when:** `oxicut bench` v7 box quality within ~3 points of Python v7 on the same fixtures; on a clean machine `oxicut models download` fetches, verifies and loads both MobileSAM files; a corrupted file is detected and re-fetched.
 - [x] Commit + `docs/PROGRESS.md` entry.
 
