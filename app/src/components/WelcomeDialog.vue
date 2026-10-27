@@ -5,7 +5,7 @@ const emit = defineEmits<{ addScans: []; close: [] }>();
 <template>
   <div class="backdrop">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <h1 id="welcome-title">Welcome to Oxi<span>Cut</span></h1>
+      <h1 id="welcome-title">Welcome to <span>Oxi</span>Cut</h1>
       <p>OxiCut splits flatbed scans of photo prints and postcards into separate, straightened images.</p>
       <ol>
         <li><strong>Add</strong> scans or a whole folder: use the button, or drop them on the window.</li>

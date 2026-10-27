@@ -96,7 +96,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="app">
     <header class="top">
-      <div class="brand">Oxi<span>Cut</span></div>
+      <div class="brand"><span>Oxi</span>Cut</div>
       <span class="chip">Detector {{ state.settings.mode }}</span>
       <span class="grow"></span>
       <template v-if="state.detect.active">
