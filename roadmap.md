@@ -141,8 +141,21 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 - [ ] Orientation model (0/90/180/270) via `ort`, registered in `oxicut-models`.
 - [ ] Settings toggle to pre-download all models; custom mirror URL.
-- [ ] macOS/Linux builds, code signing, auto-update.
+- [ ] macOS/Linux builds.
 - [ ] Album Splitter mode.
+
+## Phase 7: Distribution
+
+Plan, research and sources: [`docs/distribution-plan.md`](docs/distribution-plan.md). The audience is non-technical and mostly older, so the Microsoft Store (free to publish to, MSIX needs no certificate) is the main route, a website with a direct installer the second.
+
+- [ ] One version source: the workspace version in `Cargo.toml`; `oxicut_core::VERSION`, `tauri.conf.json` and `app/package.json` follow it.
+- [ ] Installer settings (publisher, NSIS per-user install, WebView2) in `tauri.conf.json`.
+- [ ] Release workflow: a manual patch/minor/major bump, tests, build, and a GitHub Release with the installer under a stable name, the command-line zip and checksums.
+- [ ] MSIX packaging job for the Microsoft Store (after the name is reserved in Partner Center).
+- [ ] Website on GitHub Pages: download buttons, three-step guide, FAQ, privacy page, support contact.
+- [ ] Code signing for the direct installer (SignPath Foundation, if eligible).
+- [ ] Auto-update via the Tauri updater (direct installer only; the Store updates its own).
+- [ ] winget manifest, optional.
 
 ## Acceptance criteria (from the user)
 
