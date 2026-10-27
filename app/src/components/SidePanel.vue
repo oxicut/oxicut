@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { formatBytes, revealInExplorer } from "../api";
 import {
   chooseOutputFolder,
@@ -12,6 +12,7 @@ import {
   showExportFolder,
   state,
 } from "../store";
+import { layout, togglePanel } from "../layout";
 
 type Tab = "detect" | "export" | "models";
 const tab = ref<Tab>("detect");
@@ -33,16 +34,52 @@ function percent(id: string): number {
   return total ? Math.min(100, (p.downloaded / total) * 100) : 0;
 }
 
+// What the collapsed rail shows: the detector, the output format, and whether the models need attention.
+const formatLabel = computed(() => ({ same: "Same", jpg: "JPG", png: "PNG", tiff: "TIFF" })[state.settings.format]);
+const modelsMissing = computed(() => state.settings.mode === "v7" && state.models.length > 0 && !v7Ready());
+const downloadLabel = computed(() => {
+  const ids = Object.keys(state.modelProgress);
+  return ids.length ? `${Math.round(ids.reduce((sum, id) => sum + percent(id), 0) / ids.length)}%` : "";
+});
+
+function showTab(next: Tab) {
+  tab.value = next;
+  layout.panelCollapsed = false;
+}
+
 const openModelsFolder = () =>
   state.modelsFolder && revealInExplorer(state.modelsFolder).catch(() => say("The models folder does not exist yet."));
 </script>
 
 <template>
-  <aside class="panel">
+  <aside v-if="layout.panelCollapsed" class="panel rail">
+    <button class="btn ghost chevron" title="Show the side panel (Ctrl+Shift+B)" aria-label="Show the side panel" @click="togglePanel">«</button>
+    <button class="tool" :aria-pressed="tab === 'detect'" :title="`Detection: ${state.settings.mode}`" @click="showTab('detect')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="8" cy="17" r="2" /></svg>
+      {{ state.settings.mode }}
+    </button>
+    <button class="tool" :aria-pressed="tab === 'export'" :title="`Export: ${formatLabel}`" @click="showTab('export')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 14v5h14v-5" /></svg>
+      {{ formatLabel }}
+    </button>
+    <button
+      class="tool"
+      :aria-pressed="tab === 'models'"
+      :title="modelsMissing ? 'Models: v7 is selected but its models are missing' : 'Models'"
+      @click="showTab('models')"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9" /></svg>
+      {{ downloadLabel || "Models" }}
+      <span v-if="modelsMissing" class="dot" aria-hidden="true"></span>
+    </button>
+  </aside>
+
+  <aside v-else class="panel">
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" :aria-selected="tab === 'detect'" @click="tab = 'detect'">Detection</button>
       <button class="tab" role="tab" :aria-selected="tab === 'export'" @click="tab = 'export'">Export</button>
       <button class="tab" role="tab" :aria-selected="tab === 'models'" @click="tab = 'models'">Models</button>
+      <button class="tab-toggle" title="Hide the side panel (Ctrl+Shift+B)" aria-label="Hide the side panel" @click="togglePanel">»</button>
     </div>
 
     <div v-if="tab === 'detect'" class="body">
@@ -212,6 +249,30 @@ const openModelsFolder = () =>
 .tabs {
   display: flex;
   border-bottom: 1px solid var(--border);
+}
+.tab-toggle {
+  width: 36px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tab-toggle:hover {
+  color: var(--text);
+}
+.rail {
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.25rem;
+}
+.rail .tool {
+  width: 100%;
+}
+.chevron {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
 }
 .tab {
   flex: 1;

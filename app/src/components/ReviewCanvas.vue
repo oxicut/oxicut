@@ -236,8 +236,12 @@ function applyBoxes() {
   syncState();
 }
 
+/** True while the view is the "fit to window" one; a manual zoom or pan clears it. */
+let fitted = true;
+
 function fit() {
   if (!canvas || !props.scan || props.scan.width === 0) return;
+  fitted = true;
   const { width, height } = props.scan;
   const cw = canvas.getWidth();
   const ch = canvas.getHeight();
@@ -432,6 +436,7 @@ onMounted(() => {
     const event = opt.e as WheelEvent;
     const zoom = Math.min(4, Math.max(0.03, canvas!.getZoom() * 0.999 ** event.deltaY));
     canvas!.zoomToPoint(new Point(event.offsetX, event.offsetY), zoom);
+    fitted = false;
     zoomPercent.value = Math.round(zoom * 100);
     restyle();
     event.preventDefault();
@@ -449,6 +454,7 @@ onMounted(() => {
   });
   canvas.on("mouse:move", (opt) => {
     if (!panning) return;
+    fitted = false;
     canvas!.relativePan(new Point((opt.e as MouseEvent).movementX, (opt.e as MouseEvent).movementY));
   });
   canvas.on("mouse:up", () => {
@@ -460,8 +466,18 @@ onMounted(() => {
 
   observer = new ResizeObserver(() => {
     if (!canvas || !host.value) return;
+    const [wasWidth, wasHeight] = [canvas.getWidth(), canvas.getHeight()];
     canvas.setDimensions({ width: host.value.clientWidth, height: host.value.clientHeight });
-    fit();
+    if (fitted) {
+      fit();
+      return;
+    }
+    // A zoomed-in view stays where it was, centred in the new size (a side panel opening or closing
+    // must not throw the user's view away).
+    const view = [...canvas.viewportTransform] as typeof canvas.viewportTransform;
+    view[4] += (canvas.getWidth() - wasWidth) / 2;
+    view[5] += (canvas.getHeight() - wasHeight) / 2;
+    canvas.setViewportTransform(view);
   });
   observer.observe(host.value);
 
@@ -608,42 +624,6 @@ watch(() => props.scan?.flags, restyle, { deep: true });
   background: var(--surface);
   border-right: 1px solid var(--border);
   overflow-y: auto;
-}
-.tool {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.45rem 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 11px;
-  cursor: pointer;
-}
-.tool svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.tool:hover:not(:disabled) {
-  background: var(--surface-2);
-}
-.tool.danger:hover:not(:disabled) {
-  color: #d33;
-}
-.tool:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.tool:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
 }
 .sep {
   height: 1px;

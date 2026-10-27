@@ -7,6 +7,7 @@ import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
 import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
+import { layout, togglePanel, toggleQueue } from "./layout";
 import {
   addPaths,
   addScansFromDialog,
@@ -66,6 +67,17 @@ async function onCloseRequested(event: CloseRequestedEvent) {
   else await getCurrentWindow().destroy();
 }
 
+/** Ctrl+B hides or shows the scan list, Ctrl+Shift+B the side panel. */
+function onKeydown(event: KeyboardEvent) {
+  if (!event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== "b") return;
+  if (showWelcome.value || showClose.value) return;
+  const target = event.target as HTMLElement | null;
+  if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
+  event.preventDefault();
+  if (event.shiftKey) togglePanel();
+  else toggleQueue();
+}
+
 function approveAndAdvance() {
   if (!selectedScan.value) return;
   approve(selectedScan.value);
@@ -73,6 +85,7 @@ function approveAndAdvance() {
 }
 
 onMounted(async () => {
+  window.addEventListener("keydown", onKeydown);
   // Files dropped from Explorer arrive with their real paths.
   unlisten = await getCurrentWebview().onDragDropEvent((event) => {
     const payload = event.payload;
@@ -88,13 +101,14 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKeydown);
   unlisten?.();
   unlistenClose?.();
 });
 </script>
 
 <template>
-  <div class="app">
+  <div class="app" :class="{ 'queue-collapsed': layout.queueCollapsed, 'panel-collapsed': layout.panelCollapsed }">
     <header class="top">
       <div class="brand"><span>Oxi</span>Cut</div>
       <span class="chip">Detector {{ state.settings.mode }}</span>
@@ -148,14 +162,23 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app {
+  --queue-w: 280px;
+  --panel-w: 320px;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  grid-template-columns: var(--queue-w) minmax(0, 1fr) var(--panel-w);
+  transition: grid-template-columns 0.15s ease;
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     "top top top"
     "queue review panel"
     "status status status";
   height: 100%;
+}
+.app.queue-collapsed {
+  --queue-w: 64px;
+}
+.app.panel-collapsed {
+  --panel-w: 56px;
 }
 .top {
   grid-area: top;

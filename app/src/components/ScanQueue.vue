@@ -12,6 +12,7 @@ import {
   state,
   type ScanItem,
 } from "../store";
+import { layout, toggleQueue } from "../layout";
 
 type Filter = "all" | "review" | "approved";
 const filter = ref<Filter>("all");
@@ -41,14 +42,43 @@ const chipClass = (scan: ScanItem) => ({
 
 const statusLabel = (scan: ScanItem) =>
   scan.status === "queued" ? "waiting" : scan.status === "detecting" ? "detecting…" : scan.status;
+
+/** Scans the "To review" filter would show: what still needs the user's attention. */
+const toReview = computed(
+  () => state.scans.filter((s) => s.status === "flagged" || s.status === "pending" || s.status === "error").length,
+);
+
+const railTip = (scan: ScanItem) =>
+  `${scan.name}: ${statusLabel(scan)}` + (scan.width ? `, ${scan.boxes.length} ${scan.boxes.length === 1 ? "item" : "items"}` : "");
 </script>
 
 <template>
-  <aside class="queue">
+  <aside v-if="layout.queueCollapsed" class="queue rail">
+    <button class="btn ghost" title="Show the scan list (Ctrl+B)" aria-label="Show the scan list" @click="toggleQueue">»</button>
+    <button class="btn ghost" title="Add scans" aria-label="Add scans" @click="addScansFromDialog">+</button>
+    <div class="count" :title="`${approvedCount} of ${state.scans.length} approved`">
+      <strong>{{ approvedCount }}/{{ state.scans.length }}</strong>
+      <div class="progress"><div class="bar" :style="{ width: `${(approvedCount / Math.max(1, state.scans.length)) * 100}%` }"></div></div>
+    </div>
+    <span v-if="toReview" class="chip warn" :title="`${toReview} to review`">{{ toReview }}</span>
+    <ul class="strip">
+      <li v-for="scan in state.scans" :key="scan.id">
+        <button class="item" :class="{ active: scan.id === state.selectedId }" :title="railTip(scan)" :aria-label="railTip(scan)" @click="selectScan(scan.id)">
+          <span class="thumb" :data-status="scan.status" aria-hidden="true">
+            <img v-if="scan.thumbnail" :src="scan.thumbnail" alt="" />
+            <span v-else class="spinner"></span>
+          </span>
+        </button>
+      </li>
+    </ul>
+  </aside>
+
+  <aside v-else class="queue">
     <div class="head">
       <div class="row">
         <button class="btn primary grow" @click="addScansFromDialog">Add scans…</button>
         <button class="btn" title="Add every scan in a folder" @click="addFolderFromDialog">Folder…</button>
+        <button class="btn ghost" title="Hide the scan list (Ctrl+B)" aria-label="Hide the scan list" @click="toggleQueue">«</button>
       </div>
       <div class="progress" :title="`${approvedCount} of ${state.scans.length} approved`">
         <div class="bar" :style="{ width: `${(approvedCount / Math.max(1, state.scans.length)) * 100}%` }"></div>
@@ -99,6 +129,46 @@ const statusLabel = (scan: ScanItem) =>
   min-height: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
+}
+.rail {
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.25rem;
+}
+.rail .btn {
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.count {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  width: 100%;
+  font-size: 12px;
+}
+.count .progress {
+  width: 40px;
+}
+.strip {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.strip .item {
+  justify-content: center;
+  padding: 3px;
+}
+.strip .thumb {
+  width: 44px;
+  height: 44px;
 }
 .head {
   display: grid;

@@ -193,3 +193,54 @@ kbd {
 .muted {
   color: var(--muted);
 }
+
+/* Icon-over-label button used by the tool rails (box tools, collapsed side panels). */
+.tool {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.45rem 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.tool svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tool:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.tool.danger:hover:not(:disabled) {
+  color: #d33;
+}
+.tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.tool[aria-pressed="true"] {
+  background: var(--accent-soft);
+}
+.tool .dot {
+  position: absolute;
+  top: 5px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
