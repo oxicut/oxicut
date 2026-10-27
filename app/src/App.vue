@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--divider) solid var(--border);
 }
 .brand {
   font-size: 18px;

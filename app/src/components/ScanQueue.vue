@@ -128,7 +128,7 @@ const railTip = (scan: ScanItem) =>
   flex-direction: column;
   min-height: 0;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border-right: var(--divider) solid var(--border);
 }
 .rail {
   align-items: center;

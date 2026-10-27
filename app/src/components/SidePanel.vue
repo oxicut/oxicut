@@ -244,7 +244,7 @@ const openModelsFolder = () =>
   flex-direction: column;
   min-height: 0;
   background: var(--surface);
-  border-left: 1px solid var(--border);
+  border-left: var(--divider) solid var(--border);
 }
 .tabs {
   display: flex;
