@@ -20,7 +20,7 @@ use boxes::{BoxRegion, BoxesFile};
 #[derive(Parser)]
 #[command(
     name = "oxicut",
-    version,
+    version = oxicut_core::VERSION,
     about = "Split flatbed scans into separate, straightened prints"
 )]
 struct Cli {
@@ -131,6 +131,12 @@ struct CropArgs {
     /// JPEG quality, 1-100.
     #[arg(long, default_value_t = 92)]
     quality: u8,
+    /// Do not copy the scan's resolution, colour profile and EXIF into the crops.
+    #[arg(long)]
+    no_metadata: bool,
+    /// Do not write OxiCut into the crops' Software field.
+    #[arg(long)]
+    no_software_tag: bool,
 }
 
 fn main() -> Result<()> {
@@ -292,6 +298,8 @@ fn crop(args: CropArgs) -> Result<()> {
         pattern: "{source}-{n}".into(),
         // Re-running a command line export refreshes its files.
         collision: Collision::Overwrite,
+        keep_metadata: !args.no_metadata,
+        tag_software: !args.no_software_tag,
     };
     let written = export_regions(&image, &args.input, &regions, &args.output, &settings)?;
     for file in &written {

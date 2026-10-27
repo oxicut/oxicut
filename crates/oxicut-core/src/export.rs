@@ -3,11 +3,13 @@
 
 use std::path::{Path, PathBuf};
 
-use image::codecs::jpeg::JpegEncoder;
+use image::codecs::jpeg::{JpegEncoder, PixelDensity, PixelDensityUnit};
 use image::{DynamicImage, ImageFormat};
+use img_parts::{ImageEXIF, ImageICC};
 
 use crate::crop::crop_region;
 use crate::geometry::RotatedRect;
+use crate::metadata::Metadata;
 
 /// Output file format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,11 +59,16 @@ pub enum ExportError {
 
 /// Save `image` in `format`. JPEG is 8-bit only, so deeper images are reduced;
 /// PNG and TIFF keep their bit depth. `format` must not be `Same`.
+///
+/// `metadata` (the scan's resolution, colour profile and EXIF; empty when the
+/// user does not want them kept) is written into the file. Every file also
+/// names OxiCut in its `Software` field.
 pub fn save_image(
     image: &DynamicImage,
     path: &Path,
     format: OutputFormat,
     jpeg_quality: u8,
+    metadata: &Metadata,
 ) -> Result<(), ExportError> {
     let fail = |message: String| ExportError::Write {
         path: path.to_path_buf(),
@@ -69,21 +76,137 @@ pub fn save_image(
     };
     match format {
         OutputFormat::Jpg => {
-            let file = std::fs::File::create(path).map_err(|e| fail(e.to_string()))?;
-            let mut writer = std::io::BufWriter::new(file);
-            let encoder = JpegEncoder::new_with_quality(&mut writer, jpeg_quality.clamp(1, 100));
+            let mut bytes = Vec::new();
+            let mut encoder = JpegEncoder::new_with_quality(&mut bytes, jpeg_quality.clamp(1, 100));
+            if let Some(dpi) = metadata.dpi {
+                let density = |v: f32| v.round().clamp(1.0, 65535.0) as u16;
+                encoder.set_pixel_density(PixelDensity {
+                    density: (density(dpi.x), density(dpi.y)),
+                    unit: PixelDensityUnit::Inches,
+                });
+            }
             DynamicImage::ImageRgb8(image.to_rgb8())
                 .write_with_encoder(encoder)
-                .map_err(|e| fail(e.to_string()))
+                .map_err(|e| fail(e.to_string()))?;
+            std::fs::write(path, with_jpeg_metadata(bytes, metadata)).map_err(|e| fail(e.to_string()))
         }
-        OutputFormat::Png => image
-            .save_with_format(path, ImageFormat::Png)
-            .map_err(|e| fail(e.to_string())),
-        OutputFormat::Tiff => image
-            .save_with_format(path, ImageFormat::Tiff)
-            .map_err(|e| fail(e.to_string())),
+        OutputFormat::Png => {
+            let mut bytes = Vec::new();
+            image
+                .write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
+                .map_err(|e| fail(e.to_string()))?;
+            std::fs::write(path, with_png_metadata(bytes, metadata)).map_err(|e| fail(e.to_string()))
+        }
+        OutputFormat::Tiff => write_tiff(image, path, metadata).map_err(fail),
         OutputFormat::Same => unreachable!("resolve the format before saving"),
     }
+}
+
+/// Add the colour profile and EXIF to an encoded JPEG. If it cannot be
+/// parsed (it was just written by the encoder, so it should) it is left as is.
+fn with_jpeg_metadata(bytes: Vec<u8>, metadata: &Metadata) -> Vec<u8> {
+    let Ok(mut jpeg) = img_parts::jpeg::Jpeg::from_bytes(bytes.clone().into()) else {
+        return bytes;
+    };
+    jpeg.set_icc_profile(metadata.icc.clone().map(Into::into));
+    jpeg.set_exif(metadata.crop_exif().map(Into::into));
+    jpeg.encoder().bytes().to_vec()
+}
+
+/// Add resolution (`pHYs`), colour profile, EXIF and a `Software` text chunk to an encoded PNG.
+fn with_png_metadata(bytes: Vec<u8>, metadata: &Metadata) -> Vec<u8> {
+    use img_parts::png::{Png, PngChunk};
+    let Ok(mut png) = Png::from_bytes(bytes.clone().into()) else {
+        return bytes;
+    };
+    png.set_icc_profile(metadata.icc.clone().map(Into::into));
+    png.set_exif(metadata.crop_exif().map(Into::into));
+    // Ancillary chunks go right after the header, before the pixel data.
+    if let Some(software) = metadata.software_tag() {
+        let mut text = b"Software\0".to_vec();
+        text.extend_from_slice(software.as_bytes());
+        png.chunks_mut().insert(1, PngChunk::new(*b"tEXt", text.into()));
+    }
+    if let Some(dpi) = metadata.dpi {
+        let per_metre = |v: f32| ((v as f64 / 0.0254).round() as u32).to_be_bytes();
+        let mut phys = Vec::with_capacity(9);
+        phys.extend_from_slice(&per_metre(dpi.x));
+        phys.extend_from_slice(&per_metre(dpi.y));
+        phys.push(1); // unit: metre
+        png.chunks_mut().insert(1, PngChunk::new(*b"pHYs", phys.into()));
+    }
+    png.encoder().bytes().to_vec()
+}
+
+/// TIFF through the `tiff` crate directly, which `image` does not let us add tags to.
+fn write_tiff(image: &DynamicImage, path: &Path, metadata: &Metadata) -> Result<(), String> {
+    use tiff::encoder::{TiffEncoder, colortype};
+    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let mut writer = std::io::BufWriter::new(file);
+    let mut encoder = TiffEncoder::new(&mut writer).map_err(|e| e.to_string())?;
+    let result = match image {
+        DynamicImage::ImageLuma8(b) => {
+            tiff_frame::<colortype::Gray8, _>(&mut encoder, b.width(), b.height(), b, metadata)
+        }
+        DynamicImage::ImageLuma16(b) => {
+            tiff_frame::<colortype::Gray16, _>(&mut encoder, b.width(), b.height(), b, metadata)
+        }
+        DynamicImage::ImageRgb8(b) => {
+            tiff_frame::<colortype::RGB8, _>(&mut encoder, b.width(), b.height(), b, metadata)
+        }
+        DynamicImage::ImageRgb16(b) => {
+            tiff_frame::<colortype::RGB16, _>(&mut encoder, b.width(), b.height(), b, metadata)
+        }
+        DynamicImage::ImageRgba8(b) => {
+            tiff_frame::<colortype::RGBA8, _>(&mut encoder, b.width(), b.height(), b, metadata)
+        }
+        DynamicImage::ImageRgba16(b) => {
+            tiff_frame::<colortype::RGBA16, _>(&mut encoder, b.width(), b.height(), b, metadata)
+        }
+        // Grey with alpha and floating point: widen to the nearest layout TIFF viewers all read.
+        DynamicImage::ImageLumaA16(_) | DynamicImage::ImageRgb32F(_) | DynamicImage::ImageRgba32F(_) => {
+            let b = image.to_rgba16();
+            tiff_frame::<colortype::RGBA16, _>(&mut encoder, b.width(), b.height(), &b, metadata)
+        }
+        _ => {
+            let b = image.to_rgba8();
+            tiff_frame::<colortype::RGBA8, _>(&mut encoder, b.width(), b.height(), &b, metadata)
+        }
+    };
+    result.map_err(|e| e.to_string())
+}
+
+fn tiff_frame<C, W>(
+    encoder: &mut tiff::encoder::TiffEncoder<W>,
+    width: u32,
+    height: u32,
+    pixels: &[C::Inner],
+    metadata: &Metadata,
+) -> tiff::TiffResult<()>
+where
+    C: tiff::encoder::colortype::ColorType,
+    W: std::io::Write + std::io::Seek,
+    [C::Inner]: tiff::encoder::TiffValue,
+{
+    use tiff::encoder::Rational;
+    use tiff::tags::{ResolutionUnit, Tag};
+    let mut frame = encoder.new_image::<C>(width, height)?;
+    if let Some(dpi) = metadata.dpi {
+        let ratio = |v: f32| Rational {
+            n: (v * 100.0).round() as u32,
+            d: 100,
+        };
+        frame.x_resolution(ratio(dpi.x));
+        frame.y_resolution(ratio(dpi.y));
+        frame.resolution_unit(ResolutionUnit::Inch);
+    }
+    if let Some(software) = metadata.software_tag() {
+        frame.encoder().write_tag(Tag::Software, software.as_str())?;
+    }
+    if let Some(icc) = &metadata.icc {
+        frame.encoder().write_tag(Tag::IccProfile, &icc[..])?;
+    }
+    frame.write_data(pixels)
 }
 
 /// What to do when the target file already exists.
@@ -104,6 +227,11 @@ pub struct ExportSettings {
     /// from one scan cannot collide.
     pub pattern: String,
     pub collision: Collision,
+    /// Copy the scan's resolution, colour profile and EXIF into the crops.
+    /// Off, the crops still say OxiCut made them.
+    pub keep_metadata: bool,
+    /// Write OxiCut into each crop's `Software` field. Independent of `keep_metadata`.
+    pub tag_software: bool,
 }
 
 impl Default for ExportSettings {
@@ -113,6 +241,8 @@ impl Default for ExportSettings {
             jpeg_quality: 92,
             pattern: "{source}-{n}".into(),
             collision: Collision::Rename,
+            keep_metadata: true,
+            tag_software: true,
         }
     }
 }
@@ -209,6 +339,14 @@ pub fn export_regions(
         .unwrap_or_else(|| "scan".into());
     let format = settings.format.resolve(source_path);
     let source_canonical = source_path.canonicalize().ok();
+    let metadata = Metadata {
+        tag_software: settings.tag_software,
+        ..if settings.keep_metadata {
+            Metadata::read(source_path)
+        } else {
+            Metadata::default()
+        }
+    };
 
     let mut written = Vec::new();
     for (index, region) in regions.iter().enumerate() {
@@ -222,7 +360,7 @@ pub fn export_regions(
         {
             return Err(ExportError::WouldOverwriteSource(source_path.to_path_buf()));
         }
-        save_image(&crop, &path, format, settings.jpeg_quality)?;
+        save_image(&crop, &path, format, settings.jpeg_quality, &metadata)?;
         written.push(ExportedFile {
             path,
             width: crop.width(),
@@ -235,7 +373,7 @@ pub fn export_regions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{ImageBuffer, Rgb, RgbImage};
+    use image::{GenericImageView, ImageBuffer, Rgb, RgbImage};
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("oxicut-export-{}-{name}", std::process::id()));
@@ -445,5 +583,224 @@ mod tests {
         assert_eq!(written.len(), 1);
         // The surviving print keeps its own number, so names line up with the on-screen boxes.
         assert!(written[0].path.ends_with("s-2.png"));
+    }
+
+    fn rich_metadata() -> Metadata {
+        use exif::experimental::Writer;
+        use exif::{Field, In, Tag, Value};
+        let fields = [
+            Field {
+                tag: Tag::DateTimeOriginal,
+                ifd_num: In::PRIMARY,
+                value: Value::Ascii(vec![b"2024:05:01 10:00:00".to_vec()]),
+            },
+            Field {
+                tag: Tag::Make,
+                ifd_num: In::PRIMARY,
+                value: Value::Ascii(vec![b"EPSON".to_vec()]),
+            },
+        ];
+        let mut writer = Writer::new();
+        for f in &fields {
+            writer.push_field(f);
+        }
+        let mut exif = std::io::Cursor::new(Vec::new());
+        writer.write(&mut exif, true).unwrap();
+        Metadata {
+            dpi: Some(crate::metadata::Dpi { x: 600.0, y: 600.0 }),
+            icc: Some((0..300u32).map(|i| (i % 251) as u8).collect()),
+            exif: Some(exif.into_inner()),
+            tag_software: true,
+        }
+    }
+
+    fn exif_text(raw: &[u8], tag: exif::Tag) -> Option<String> {
+        let exif = exif::Reader::new().read_raw(raw.to_vec()).ok()?;
+        match &exif.get_field(tag, exif::In::PRIMARY)?.value {
+            exif::Value::Ascii(v) => String::from_utf8(v.first()?.clone()).ok(),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn jpeg_and_png_keep_resolution_profile_and_exif_and_name_oxicut() {
+        let dir = scratch("meta-jpg-png");
+        let meta = rich_metadata();
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(40, 30, Rgb([90, 120, 150])));
+        for (format, name) in [(OutputFormat::Jpg, "c.jpg"), (OutputFormat::Png, "c.png")] {
+            let path = dir.join(name);
+            save_image(&crop, &path, format, 90, &meta).unwrap();
+
+            let back = Metadata::read(&path);
+            let dpi = back.dpi.unwrap_or_else(|| panic!("{name}: no resolution"));
+            assert!((dpi.x - 600.0).abs() < 0.5 && (dpi.y - 600.0).abs() < 0.5, "{name}: {dpi:?}");
+            assert_eq!(back.icc, meta.icc, "{name}: colour profile");
+            let exif = back.exif.unwrap_or_else(|| panic!("{name}: no EXIF"));
+            assert_eq!(exif_text(&exif, exif::Tag::Make).as_deref(), Some("EPSON"));
+            assert_eq!(
+                exif_text(&exif, exif::Tag::DateTimeOriginal).as_deref(),
+                Some("2024:05:01 10:00:00")
+            );
+            assert_eq!(
+                exif_text(&exif, exif::Tag::Software).as_deref(),
+                Some(crate::metadata::software().as_str())
+            );
+            // Still a picture the usual decoder reads.
+            assert_eq!(image::open(&path).unwrap().dimensions(), (40, 30));
+        }
+    }
+
+    #[test]
+    fn tiff_keeps_resolution_and_profile_and_stays_sixteen_bit() {
+        let dir = scratch("meta-tiff");
+        let path = dir.join("c.tif");
+        let meta = rich_metadata();
+        let crop: ImageBuffer<Rgb<u16>, Vec<u16>> =
+            ImageBuffer::from_fn(8, 6, |x, y| Rgb([x as u16 * 8000, y as u16 * 9000, 65535]));
+        save_image(&DynamicImage::ImageRgb16(crop.clone()), &path, OutputFormat::Tiff, 90, &meta).unwrap();
+
+        let back = Metadata::read(&path);
+        let dpi = back.dpi.expect("no resolution");
+        assert!((dpi.x - 600.0).abs() < 0.5, "{dpi:?}");
+        assert_eq!(back.icc, meta.icc);
+        let reopened = image::open(&path).unwrap();
+        assert_eq!(reopened.dimensions(), (8, 6));
+        assert_eq!(reopened.to_rgb16(), crop, "pixels changed");
+    }
+
+    #[test]
+    fn tiff_names_oxicut_in_the_software_tag() {
+        use tiff::decoder::{Decoder, ifd::Value};
+        let dir = scratch("meta-tiff-software");
+        let path = dir.join("c.tif");
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(4, 4, Rgb([1, 2, 3])));
+        save_image(&crop, &path, OutputFormat::Tiff, 90, &stamp_only()).unwrap();
+        let mut decoder = Decoder::new(std::io::BufReader::new(std::fs::File::open(&path).unwrap())).unwrap();
+        let Value::Ascii(text) = decoder.get_tag(tiff::tags::Tag::Software).unwrap() else {
+            panic!("Software is not text")
+        };
+        assert_eq!(text, crate::metadata::software());
+    }
+
+    /// No scan metadata, only the OxiCut stamp.
+    fn stamp_only() -> Metadata {
+        Metadata {
+            tag_software: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_software_stamp_works_without_the_scans_metadata() {
+        let dir = scratch("meta-stamp-only");
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(20, 20, Rgb([9, 9, 9])));
+        for (format, name) in [(OutputFormat::Jpg, "c.jpg"), (OutputFormat::Png, "c.png")] {
+            let path = dir.join(name);
+            save_image(&crop, &path, format, 90, &stamp_only()).unwrap();
+            let back = Metadata::read(&path);
+            assert!(back.icc.is_none() && back.dpi.is_none());
+            let exif = back.exif.expect("Software needs an EXIF block");
+            assert_eq!(
+                exif_text(&exif, exif::Tag::Software).as_deref(),
+                Some(crate::metadata::software().as_str())
+            );
+            assert!(exif_text(&exif, exif::Tag::Make).is_none());
+        }
+    }
+
+    #[test]
+    fn without_the_stamp_the_scanners_own_software_stays_and_nothing_is_invented() {
+        let dir = scratch("meta-no-stamp");
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(20, 20, Rgb([9, 9, 9])));
+
+        // Scan metadata kept, stamp off: the scan's Software value survives.
+        let mut kept = rich_metadata();
+        kept.tag_software = false;
+        kept.exif = Some({
+            use exif::{Field, In, Tag, Value};
+            let software = Field {
+                tag: Tag::Software,
+                ifd_num: In::PRIMARY,
+                value: Value::Ascii(vec![b"EPSON Scan".to_vec()]),
+            };
+            let mut writer = exif::experimental::Writer::new();
+            writer.push_field(&software);
+            let mut out = std::io::Cursor::new(Vec::new());
+            writer.write(&mut out, true).unwrap();
+            out.into_inner()
+        });
+        let path = dir.join("kept.jpg");
+        save_image(&crop, &path, OutputFormat::Jpg, 90, &kept).unwrap();
+        let exif = Metadata::read(&path).exif.unwrap();
+        assert_eq!(exif_text(&exif, exif::Tag::Software).as_deref(), Some("EPSON Scan"));
+
+        // Everything off: no EXIF block, no resolution, no text chunk, no TIFF Software tag.
+        let nothing = Metadata::default();
+        for (format, name) in [
+            (OutputFormat::Jpg, "n.jpg"),
+            (OutputFormat::Png, "n.png"),
+            (OutputFormat::Tiff, "n.tif"),
+        ] {
+            let path = dir.join(name);
+            save_image(&crop, &path, format, 90, &nothing).unwrap();
+            assert!(Metadata::read(&path).is_empty(), "{name} has metadata");
+        }
+        assert!(
+            !std::fs::read(dir.join("n.png"))
+                .unwrap()
+                .windows(8)
+                .any(|w| w == b"Software"),
+            "PNG still has a Software text chunk"
+        );
+        let mut tiff = tiff::decoder::Decoder::new(std::io::BufReader::new(
+            std::fs::File::open(dir.join("n.tif")).unwrap(),
+        ))
+        .unwrap();
+        assert!(tiff.find_tag(tiff::tags::Tag::Software).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_whole_export_carries_the_scans_metadata_unless_told_not_to() {
+        let dir = scratch("meta-export");
+        let source = dir.join("s.jpg");
+        let meta = rich_metadata();
+        save_image(
+            &DynamicImage::ImageRgb8(RgbImage::from_pixel(300, 200, Rgb([200, 200, 200]))),
+            &source,
+            OutputFormat::Jpg,
+            95,
+            &meta,
+        )
+        .unwrap();
+        let scan = image::open(&source).unwrap();
+        let one = [RotatedRect::new(150.0, 100.0, 100.0, 80.0, 0.0)];
+
+        let kept = ExportSettings {
+            format: OutputFormat::Png,
+            pattern: "kept".into(),
+            ..Default::default()
+        };
+        let path = export_regions(&scan, &source, &one, &dir, &kept).unwrap().remove(0).path;
+        assert!(Metadata::read(&path).dpi.is_some());
+        assert_eq!(Metadata::read(&path).icc, meta.icc);
+
+        let dropped = ExportSettings {
+            keep_metadata: false,
+            pattern: "dropped".into(),
+            ..kept
+        };
+        let path = export_regions(&scan, &source, &one, &dir, &dropped).unwrap().remove(0).path;
+        let back = Metadata::read(&path);
+        assert!(back.dpi.is_none() && back.icc.is_none());
+        // The stamp is a separate choice: still there with the scan's metadata left out.
+        assert!(back.exif.is_some());
+
+        let bare = ExportSettings {
+            tag_software: false,
+            pattern: "bare".into(),
+            ..dropped
+        };
+        let path = export_regions(&scan, &source, &one, &dir, &bare).unwrap().remove(0).path;
+        assert!(Metadata::read(&path).is_empty());
     }
 }

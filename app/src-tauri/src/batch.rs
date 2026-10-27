@@ -139,6 +139,8 @@ pub struct ExportOptions {
     pub format: String,
     pub jpeg_quality: u8,
     pub pattern: String,
+    pub keep_metadata: bool,
+    pub tag_software: bool,
     /// `None`: an `OxiCut output` folder beside each scan.
     pub output_dir: Option<String>,
 }
@@ -223,6 +225,8 @@ pub fn export_batch(
             format,
             jpeg_quality: options.jpeg_quality,
             pattern: options.pattern.clone(),
+            keep_metadata: options.keep_metadata,
+            tag_software: options.tag_software,
             // Exports never overwrite earlier ones: the user may have kept or renamed them.
             collision: Collision::Rename,
         };
@@ -450,6 +454,8 @@ mod tests {
             format: "png".into(),
             jpeg_quality: 92,
             pattern: "{source}-{n}".into(),
+            keep_metadata: true,
+            tag_software: true,
             output_dir: None,
         };
 
@@ -494,6 +500,8 @@ mod tests {
             format: "jpg".into(),
             jpeg_quality: 85,
             pattern: "print_{n}".into(),
+            keep_metadata: true,
+            tag_software: true,
             output_dir: Some(out.to_string_lossy().into_owned()),
         };
         let summary = export_batch(&items, &options, &|_| {}).unwrap();
@@ -511,6 +519,8 @@ mod tests {
             format: "bmp".into(),
             jpeg_quality: 90,
             pattern: "x".into(),
+            keep_metadata: true,
+            tag_software: true,
             output_dir: None,
         };
         assert!(export_batch(&[], &options, &|_| {}).is_err());

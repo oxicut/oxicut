@@ -20,6 +20,10 @@ pub struct AppSettings {
     pub jpeg_quality: u8,
     /// File name pattern; `{source}` and `{n}` are replaced.
     pub pattern: String,
+    /// Copy the scan's resolution, colour profile and EXIF into the crops.
+    pub keep_metadata: bool,
+    /// Write OxiCut into each crop's `Software` field.
+    pub tag_software: bool,
     /// Where crops go; `None` means an `OxiCut output` folder beside each scan.
     pub output_dir: Option<String>,
     /// Approve scans with nothing to flag as soon as they are detected.
@@ -36,6 +40,8 @@ impl Default for AppSettings {
             format: "same".into(),
             jpeg_quality: 92,
             pattern: "{source}-{n}".into(),
+            keep_metadata: true,
+            tag_software: true,
             output_dir: None,
             auto_approve: true,
         }

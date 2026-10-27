@@ -49,6 +49,8 @@ export interface AppSettings extends DetectSettings {
   format: "same" | "jpg" | "png" | "tiff";
   jpegQuality: number;
   pattern: string;
+  keepMetadata: boolean;
+  tagSoftware: boolean;
   outputDir: string | null;
   autoApprove: boolean;
 }
@@ -63,6 +65,8 @@ export interface ExportOptions {
   format: AppSettings["format"];
   jpegQuality: number;
   pattern: string;
+  keepMetadata: boolean;
+  tagSoftware: boolean;
   outputDir: string | null;
 }
 
@@ -125,6 +129,7 @@ export const saveSettings = (settings: AppSettings) => invoke<void>("save_settin
 
 export const modelsStatus = () => invoke<ModelStatus[]>("models_status");
 export const modelsFolder = () => invoke<string>("models_folder");
+export const appVersion = () => invoke<string>("app_version");
 export const downloadModels = (ids: string[], onEvent: (e: DownloadEvent) => void) =>
   invoke<void>("download_models", { ids, onEvent: channel(onEvent) });
 

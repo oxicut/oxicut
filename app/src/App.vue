@@ -128,6 +128,7 @@ onBeforeUnmount(() => {
       <span class="message">{{ state.notice || "Ready" }}</span>
       <span class="grow"></span>
       <span class="muted">{{ state.scans.length }} scans · {{ approvedCount }} approved</span>
+      <span v-if="state.version" class="muted" title="OxiCut version">OxiCut {{ state.version }}</span>
     </footer>
 
     <div v-if="dragging" class="drop" aria-hidden="true">

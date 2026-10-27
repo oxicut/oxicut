@@ -138,6 +138,12 @@ fn models_status() -> Result<Vec<ModelStatusDto>, String> {
     models::statuses(&oxicut_models::models_dir().map_err(|e| e.to_string())?)
 }
 
+/// The OxiCut version, for the status bar.
+#[tauri::command]
+fn app_version() -> &'static str {
+    oxicut_core::VERSION
+}
+
 /// Where downloaded models live, for display.
 #[tauri::command]
 fn models_folder() -> Result<String, String> {
@@ -181,6 +187,7 @@ pub fn run() {
             save_settings,
             models_status,
             models_folder,
+            app_version,
             download_models,
         ])
         .run(tauri::generate_context!())

@@ -8,8 +8,11 @@ authors.workspace = true
 
 [dependencies]
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff"] }
+img-parts = "0.4.1"
+kamadak-exif = "0.6.1"
 ort = "=2.0.0-rc.15"
 thiserror = "2.0.21"
+tiff = "0.11.3"
 
 [dev-dependencies]
 serde = { version = "1.0.229", features = ["derive"] }

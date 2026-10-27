@@ -135,9 +135,13 @@ const openModelsFolder = () =>
           </button>
         </div>
       </div>
-      <label class="check disabled" title="Not supported yet">
-        <input type="checkbox" disabled />
-        Keep DPI and EXIF (not supported yet)
+      <label class="check" title="Copies the scan's resolution (DPI), colour profile and EXIF into each image.">
+        <input v-model="state.settings.keepMetadata" type="checkbox" />
+        Keep DPI, colour profile and EXIF
+      </label>
+      <label class="check" title="Puts “OxiCut” and its version in the Software field of each image (the “Program name” in Windows Properties). With the box above ticked it replaces the scanner's own entry.">
+        <input v-model="state.settings.tagSoftware" type="checkbox" />
+        Write OxiCut into the Software field
       </label>
       <p class="muted note">Your scans are never changed, and existing files are never overwritten: a new file gets “ (2)” in its name.</p>
 

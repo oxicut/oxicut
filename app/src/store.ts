@@ -54,6 +54,8 @@ export const defaultSettings: AppSettings = {
   format: "same",
   jpegQuality: 92,
   pattern: "{source}-{n}",
+  keepMetadata: true,
+  tagSoftware: true,
   outputDir: null,
   autoApprove: true,
 };
@@ -69,6 +71,7 @@ export const state = reactive({
   notice: "",
   models: [] as ModelStatus[],
   modelsFolder: "",
+  version: "",
   modelProgress: {} as Record<string, { downloaded: number; total: number | null }>,
   modelErrors: {} as Record<string, string>,
 });
@@ -441,6 +444,8 @@ export async function exportApproved(): Promise<boolean> {
         format: state.settings.format,
         jpegQuality: state.settings.jpegQuality,
         pattern: state.settings.pattern,
+        keepMetadata: state.settings.keepMetadata,
+        tagSoftware: state.settings.tagSoftware,
         outputDir: state.settings.outputDir,
       },
       (event) => {
@@ -511,6 +516,7 @@ export async function downloadModels(ids: string[]) {
 
 export async function initApp() {
   await initSettings();
+  void api.appVersion().then((v) => (state.version = v));
   void refreshModels();
   try {
     await addPaths(await api.startupPaths());
