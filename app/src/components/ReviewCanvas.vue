@@ -493,16 +493,6 @@ watch(() => props.scan?.flags, restyle, { deep: true });
         <button class="btn" :disabled="!scan?.history.canRedo" title="Redo (Ctrl+Y or Ctrl+Shift+Z)" @click="emit('redo')">
           Redo
         </button>
-        <button class="btn" :disabled="!ready" title="Add a box" @click="addBox">+ Box</button>
-        <button class="btn" :disabled="!hasSelection" title="Split the selected box in half" @click="splitSelected">
-          Split
-        </button>
-        <button class="btn danger" :disabled="!hasSelection" title="Delete the selected box" @click="deleteSelected">
-          Delete <kbd>Del</kbd>
-        </button>
-        <button class="btn" :disabled="!hasSelection" title="Snap the selected box to the nearest 90°" @click="straighten">
-          Straighten
-        </button>
         <button class="btn" :disabled="!scan || busyDetecting" title="Run detection on this scan again" @click="emit('redetect')">
           Re-detect
         </button>
@@ -514,31 +504,53 @@ watch(() => props.scan?.flags, restyle, { deep: true });
       </div>
     </header>
 
-    <div ref="host" class="stage">
-      <canvas ref="el"></canvas>
-      <canvas
-        v-show="loupeVisible"
-        ref="loupeEl"
-        class="loupe"
-        :class="loupePlace"
-        :style="{ width: `${LOUPE_SIZE}px`, height: `${LOUPE_SIZE}px` }"
-        aria-hidden="true"
-      ></canvas>
-      <div v-if="!scan" class="overlay">
-        <strong>No scans yet</strong>
-        <span>Drop scans or a folder here, or use <em>Add scans…</em></span>
-      </div>
-      <div v-else-if="scan.status === 'error'" class="overlay error">
-        <strong>{{ scan.name }} could not be processed</strong>
-        <span>{{ scan.error }}</span>
-        <button class="btn" @click="emit('redetect')">Try again</button>
-      </div>
-      <div v-else-if="busyDetecting || loading" class="overlay light">
-        <span class="spinner" aria-hidden="true"></span>
-        <span>{{ busyDetecting ? "Finding the prints…" : "Loading the scan…" }}</span>
-      </div>
-      <div v-else-if="loadError" class="overlay error">
-        <strong>{{ loadError }}</strong>
+    <div class="work">
+      <nav class="rail" aria-label="Box tools">
+        <button class="tool" :disabled="!ready" title="Add a box" @click="addBox">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          Box
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="tool" :disabled="!hasSelection" title="Split the selected box in half" @click="splitSelected">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="1.5" /><path d="M12 5v14" /></svg>
+          Split
+        </button>
+        <button class="tool danger" :disabled="!hasSelection" title="Delete the selected box (Del)" @click="deleteSelected">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12M10 11v5M14 11v5" /></svg>
+          Delete
+        </button>
+        <button class="tool" :disabled="!hasSelection" title="Snap the selected box to the nearest 90°" @click="straighten">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="8" width="12" height="9" rx="1" /><path d="M4 5.5A9 9 0 0 1 12 3M12 3l-2.5-.5M12 3l-.5 2.5" /></svg>
+          Straighten
+        </button>
+      </nav>
+
+      <div ref="host" class="stage">
+        <canvas ref="el"></canvas>
+        <canvas
+          v-show="loupeVisible"
+          ref="loupeEl"
+          class="loupe"
+          :class="loupePlace"
+          :style="{ width: `${LOUPE_SIZE}px`, height: `${LOUPE_SIZE}px` }"
+          aria-hidden="true"
+        ></canvas>
+        <div v-if="!scan" class="overlay">
+          <strong>No scans yet</strong>
+          <span>Drop scans or a folder here, or use <em>Add scans…</em></span>
+        </div>
+        <div v-else-if="scan.status === 'error'" class="overlay error">
+          <strong>{{ scan.name }} could not be processed</strong>
+          <span>{{ scan.error }}</span>
+          <button class="btn" @click="emit('redetect')">Try again</button>
+        </div>
+        <div v-else-if="busyDetecting || loading" class="overlay light">
+          <span class="spinner" aria-hidden="true"></span>
+          <span>{{ busyDetecting ? "Finding the prints…" : "Loading the scan…" }}</span>
+        </div>
+        <div v-else-if="loadError" class="overlay error">
+          <strong>{{ loadError }}</strong>
+        </div>
       </div>
     </div>
 
@@ -566,8 +578,9 @@ watch(() => props.scan?.flags, restyle, { deep: true });
 }
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1rem;
+  gap: 0.4rem 1rem;
   padding: 0.5rem 0.75rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -579,9 +592,68 @@ watch(() => props.scan?.flags, restyle, { deep: true });
 .grow {
   flex: 1;
 }
+.work {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.rail {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  width: 68px;
+  padding: 0.5rem 0.35rem;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+.tool {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.45rem 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.tool svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tool:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.tool.danger:hover:not(:disabled) {
+  color: #d33;
+}
+.tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.sep {
+  height: 1px;
+  margin: 0.2rem 0.4rem;
+  background: var(--border);
+}
 .stage {
   position: relative;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   background: var(--stage);
   overflow: hidden;
