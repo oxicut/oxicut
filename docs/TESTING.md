@@ -34,6 +34,8 @@ Things worth checking in particular:
 - **Try v7.** Download the models in the Models tab, choose "v7 · most accurate" in the Detection tab, and use *Re-detect all*. It should find prints v7-lite missed (on the test scans: the top-middle print of the tape scan and the second photo of the 16-bit TIFF) and takes a few seconds per scan. Please note any scan where v7 is worse than v7-lite.
 - A white-bordered print on your white lid: does the box land on the photo or on the paper? v7-lite and v7 should sit on the photo where v3 ran onto the border.
 - A 16-bit TIFF from the Epson: export as *Same as the scan* and open the result. It should still be 16-bit and open in Windows Photos and IrfanView.
+- DPI and EXIF: scan something at 600 dpi, export it, and look at the crop in Windows (right click, Properties, Details). The resolution should read 600 dpi, and with *Write OxiCut into the Software field* ticked the "Program name" should read `OxiCut 0.0.1`. With *Keep DPI, colour profile and EXIF* unticked the crop should lose the dpi, the profile and the EXIF dates, and keep only the Program name. The version is also shown at the bottom right of the window.
+- First run: the welcome dialog offers the v7 download. To see it again, close OxiCut and delete `%LOCALAPPDATA%pp.oxicutBWebViewDefaultocal storage`.
 - Prints touching each other, or touching the edge of the bed.
 - A big batch (dozens of scans): does the window stay responsive?
 
@@ -41,7 +43,7 @@ Things worth checking in particular:
 
 - v7-lite is only part of ScanSplitter's v7 (no models): it finds the same number of prints as v3. The full v7 is much better at counting them, but a whole album page can still come out as one box, as in ScanSplitter.
 - Both detectors can miss pale prints on a white background and can merge prints that touch. These are the same limits ScanSplitter's v3 has, which is where the detector comes from.
-- DPI and EXIF are not copied into the crops yet (the option is shown greyed out).
+- EXIF is copied from JPEG and PNG scans only; from a TIFF scan the crops get the resolution and colour profile, not the EXIF (dates, scanner make).
 - The list of scans is not saved: closing the app forgets it (projects come later). Settings are kept.
 - No front/back pairing yet (postcards).
 - JPEG files are decoded by a different library than ScanSplitter used, so on hard test images the boxes can differ slightly from ScanSplitter's. TIFF and PNG decode identically.

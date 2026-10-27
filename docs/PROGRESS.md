@@ -76,3 +76,16 @@ Checked on a clean models folder (`OXICUT_MODELS_DIR` pointing at an empty folde
 One fix came out of it: download errors only said "error sending request", hiding why. They now carry the cause ("connection refused", and so on). The Detection tab also warns when v7 is selected but the models are missing.
 
 White-lid check on public stand-ins (the user's own scans were not at hand; none of these files are in the repo): three borderless photos on white (`3ladies1-3`, tilted 0 to 10 degrees), a white-bed scan of four cream-bordered prints (cropped from a VueScan screenshot), and a cream album page with four white-bordered prints. v3, v7-lite and v7 all find the right counts; on the cream-bordered prints the box sits on the photograph and not on the border. ScanSplitter v7 finds 3, 3, 3, 4 and 3 on the same files (we find 3, 3, 3, 4 and 4: it misses one print on the album page), so ours is not worse. Caveats: the VueScan crop has blue selection boxes drawn on it and the album page has green ones, and neither is a white lid. Still to do on the user's own Epson scans.
+
+## Phase 3: batch shell, first run, metadata (2026-10-27)
+
+Most of Phase 3 came with the manual-testing milestone. What was left, and is now done:
+
+- **First run**: the welcome dialog offers the MobileSAM download with its size and a progress percentage; when it finishes the detector switches to v7. v7-lite works in the meantime, also with no network (checked with a dead proxy: clear error, nothing half-written).
+- **50 scans**: 50 scans on v7 (34 MB in total) added at start-up. The window was never reported "not responding" over 282 samples, and detection finished in about 45 s with two workers (peak memory about 1.2 GB, back to 57 MB afterwards).
+- **DPI, colour profile and EXIF** (`oxicut-core::metadata`, pure Rust: `img-parts`, `kamadak-exif`, and the `tiff` crate that `image` already uses). The scan's resolution (JFIF density, EXIF, PNG `pHYs`, TIFF resolution tags), ICC profile and, from JPEG and PNG scans, EXIF are written into the crops of every output format. The EXIF is rewritten rather than copied: the scan's thumbnail and pixel-size fields are dropped. Round trips are tested per format, 16-bit TIFF pixels stay identical, and a 600 dpi test scan gave 600 dpi crops as JPEG, PNG and TIFF. A TIFF scan's EXIF is not carried over.
+- **Software field**: a separate option (on by default; `--no-software-tag` on the CLI) writes `OxiCut 0.0.1` into the Software field: EXIF in JPEG and PNG, a `Software` text chunk in PNG, the baseline tag in TIFF. With it off, the scanner's own Software value stays when the metadata is kept; with both off, no EXIF is written at all.
+- **Version**: `oxicut_core::VERSION`, hardcoded to `0.0.1` until the build supplies one. It is the value in the Software field, in `oxicut --version`, and at the bottom right of the app window.
+- Download errors now include the cause, and the Detection tab warns when v7 is selected but its models are missing.
+
+Left for you to check by hand: that the exported files open in Windows Photos and IrfanView.

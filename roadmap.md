@@ -107,13 +107,13 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 ## Phase 3: Tauri 2 shell (batch / auto mode)
 
-- [ ] Scaffold with `npm create tauri-app@latest` (Vue + TypeScript) inside `app/`.
-- [ ] Commands: pick files/folder, run detection on a batch in a `rayon` pool, stream per-file progress via `tauri::ipc::Channel`, write outputs.
-- [ ] **Model manager** panel: status, size, download progress, errors. Modes needing a missing model show "download required"; fall back to v3.
-- [ ] First-run flow: welcome screen -> offer MobileSAM download (show size) -> v3 until done.
-- [ ] Settings: detection mode, min/max item area (% of scan), inset px, output format (same / JPEG quality / PNG / TIFF), naming pattern `{source}-{n}`, DPI/EXIF passthrough.
-- [ ] **Done when:** 50 scans process without blocking the UI; outputs open in Windows Photos and IrfanView; 16-bit TIFF stays 16-bit on "same format"; first run with no network works in v3.
-- [ ] Commit + `docs/PROGRESS.md` entry.
+- [x] Scaffold with Tauri 2 + Vue + TypeScript inside `app/` (Phase 0.5).
+- [x] Commands: pick files/folder, run detection on a batch in a worker pool, stream per-file progress via `tauri::ipc::Channel`, write outputs.
+- [x] **Model manager** panel: status, size, download progress, errors. v7 is disabled until the models are on disk, and a v7 scan without them gets a clear error. _(No silent fallback to v3, by design: the detector in use is always the one shown.)_
+- [x] First-run flow: the welcome dialog offers the MobileSAM download (shows the size and progress) and switches to v7 when it finishes; v7-lite works meanwhile.
+- [x] Settings: detection mode, min/max item area (% of scan), trim px, output format (same / JPEG quality / PNG / TIFF), naming pattern `{source}-{n}`, DPI / colour profile / EXIF passthrough, and a separate option to write `OxiCut <version>` into the Software field.
+- [~] **Done when:** 50 scans process without blocking the UI _(checked: 50 scans on v7, window never "not responding", done in about 45 s)_; 16-bit TIFF stays 16-bit on "same format" _(tested)_; first run with no network works _(v7-lite, checked)_; outputs open in Windows Photos and IrfanView _(still to check by hand)_.
+- [x] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 4: Review mode (marquee editor)
 
