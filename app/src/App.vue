@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
+import CloseDialog from "./components/CloseDialog.vue";
 import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
 import SidePanel from "./components/SidePanel.vue";
@@ -11,8 +13,10 @@ import {
   approve,
   approvedCount,
   cancelDetection,
+  closeAssessment,
   exportApproved,
   exportableCount,
+  flushSettings,
   initApp,
   redetect,
   redo,
@@ -35,7 +39,9 @@ function welcomeSeen(): boolean {
 
 const showWelcome = ref(!welcomeSeen());
 const dragging = ref(false);
+const showClose = ref(false);
 let unlisten: (() => void) | undefined;
+let unlistenClose: (() => void) | undefined;
 
 function closeWelcome() {
   showWelcome.value = false;
@@ -49,6 +55,15 @@ function closeWelcome() {
 function addFromWelcome() {
   closeWelcome();
   void addScansFromDialog();
+}
+
+/** Every way of closing the window comes through here: ask first if work would be lost. */
+async function onCloseRequested(event: CloseRequestedEvent) {
+  event.preventDefault();
+  if (showClose.value) return;
+  await flushSettings();
+  if (closeAssessment.value.needsConfirm) showClose.value = true;
+  else await getCurrentWindow().destroy();
 }
 
 function approveAndAdvance() {
@@ -68,10 +83,14 @@ onMounted(async () => {
       void addPaths(payload.paths);
     }
   });
+  unlistenClose = await getCurrentWindow().onCloseRequested(onCloseRequested);
   void initApp();
 });
 
-onBeforeUnmount(() => unlisten?.());
+onBeforeUnmount(() => {
+  unlisten?.();
+  unlistenClose?.();
+});
 </script>
 
 <template>
@@ -94,7 +113,7 @@ onBeforeUnmount(() => unlisten?.());
 
     <ReviewCanvas
       :scan="selectedScan"
-      :keys-enabled="!showWelcome"
+      :keys-enabled="!showWelcome && !showClose"
       @approve="approveAndAdvance"
       @step="step"
       @edit="selectedScan && updateBoxes(selectedScan, $event)"
@@ -116,6 +135,13 @@ onBeforeUnmount(() => unlisten?.());
     </div>
 
     <WelcomeDialog v-if="showWelcome" @add-scans="addFromWelcome" @close="closeWelcome" />
+
+    <CloseDialog
+      v-if="showClose"
+      :assessment="closeAssessment"
+      @keep="showClose = false"
+      @discard="getCurrentWindow().destroy()"
+    />
   </div>
 </template>
 

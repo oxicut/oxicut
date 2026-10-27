@@ -27,6 +27,7 @@ Close the app before rebuilding: Windows will not replace a running exe.
 4. **Approve.** `Enter` approves the scan and moves to the next. Arrow keys move through the list without approving. *Approve N unflagged* approves all the quiet ones at once.
 5. **Export.** *Export approved* (top right, or the Export tab). Crops go to an `OxiCut output` folder beside each scan, or to the folder you pick. Names follow the pattern (default `{source}-{n}`). An existing file is never overwritten: the new one gets ` (2)` in its name. *Show in folder* opens the result.
 6. **Settings** (right panel) are saved automatically. Detection settings apply to scans detected from then on; *Re-detect all* applies them to the list.
+7. **Closing.** Closing the window asks first when work would be lost: approved scans that were never exported, scans edited after they were exported, scans with edits that are not approved, or an export still running. It offers *Keep working* and *Close without exporting*. Scans that were only added and never touched, and lists that are fully exported, close without a question. A crash, a force-kill or a Windows shutdown cannot be intercepted, and nothing is saved between sessions yet.
 
 Things worth checking in particular:
 

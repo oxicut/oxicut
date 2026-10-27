@@ -3,6 +3,7 @@
 import { computed, reactive, watch } from "vue";
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
+import { assessClose, boxesKey } from "./closeGuard";
 import { History, sameBoxes } from "./history";
 
 export type ScanStatus = "queued" | "detecting" | "pending" | "flagged" | "approved" | "error";
@@ -26,6 +27,10 @@ export interface ScanItem {
   history: History<BoxItem[]>;
   /** Bumped when undo or redo puts boxes back, so the canvas swaps them without reloading the image. */
   epoch: number;
+  /** `boxesKey` of what detection produced, to tell whether the user changed anything. */
+  detectedKey: string;
+  /** `boxesKey` of the boxes last exported successfully. */
+  exportedKey: string | null;
 }
 
 /** A copy that later edits cannot change. */
@@ -71,6 +76,8 @@ export const state = reactive({
 export const selectedScan = computed(() => state.scans.find((s) => s.id === state.selectedId) ?? null);
 export const approvedCount = computed(() => state.scans.filter((s) => s.status === "approved").length);
 export const pendingCount = computed(() => state.scans.filter((s) => s.status === "pending").length);
+/** What closing the window now would throw away. */
+export const closeAssessment = computed(() => assessClose(state.scans, state.exporting.active));
 export const exportableCount = computed(
   () => state.scans.filter((s) => s.status === "approved" && s.boxes.length > 0).length,
 );
@@ -111,10 +118,25 @@ export async function initSettings() {
     () => ({ ...state.settings }),
     (settings) => {
       window.clearTimeout(saveTimer);
-      saveTimer = window.setTimeout(() => api.saveSettings(settings).catch((e) => say(`Could not save settings: ${errorText(e)}`)), 400);
+      saveTimer = window.setTimeout(() => {
+        saveTimer = undefined;
+        api.saveSettings(settings).catch((e) => say(`Could not save settings: ${errorText(e)}`));
+      }, 400);
     },
     { deep: true },
   );
+}
+
+/** Save a settings change that is still waiting for its timer (used when the window closes). */
+export async function flushSettings() {
+  if (saveTimer === undefined) return;
+  window.clearTimeout(saveTimer);
+  saveTimer = undefined;
+  try {
+    await api.saveSettings({ ...state.settings });
+  } catch (e) {
+    say(`Could not save settings: ${errorText(e)}`);
+  }
 }
 
 // --------------------------------------------------------------- detection
@@ -148,6 +170,7 @@ function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis) {
   scan.thumbnail = analysis.thumbnail;
   if (detectedBefore) scan.history.record(snapshot(scan.boxes));
   scan.boxes = analysis.boxes.map(withId);
+  scan.detectedKey = boxesKey(scan.boxes);
   scan.error = null;
   scan.revision++;
   return settleDetected(scan);
@@ -237,6 +260,8 @@ function makeScan(path: string): ScanItem {
     revision: 0,
     history: new History<BoxItem[]>(),
     epoch: 0,
+    detectedKey: "",
+    exportedKey: null,
   };
 }
 
@@ -396,15 +421,19 @@ export async function chooseOutputFolder() {
   if (folder) state.settings.outputDir = folder;
 }
 
-export async function exportApproved() {
-  if (state.exporting.active) return;
+/** Export every approved scan; `true` when all of them were written. */
+export async function exportApproved(): Promise<boolean> {
+  if (state.exporting.active) return false;
   const items = state.scans.filter((s) => s.status === "approved" && s.boxes.length > 0);
   if (!items.length) {
     say("Nothing to export yet: approve at least one scan that has boxes.");
-    return;
+    return false;
   }
   state.exporting = { active: true, done: 0, total: items.length };
   state.exportErrors = [];
+  // What each scan looked like when the export started; edits during the export are not covered.
+  const keys = items.map((s) => boxesKey(s.boxes));
+  let complete = false;
   try {
     const summary = await api.exportScans(
       items.map((s) => ({ path: s.path, boxes: s.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })) })),
@@ -415,7 +444,10 @@ export async function exportApproved() {
         outputDir: state.settings.outputDir,
       },
       (event) => {
-        if (event.event === "finished") state.exporting.done++;
+        if (event.event === "finished") {
+          state.exporting.done++;
+          items[event.index].exportedKey = keys[event.index];
+        }
         if (event.event === "failed") {
           state.exporting.done++;
           state.exportErrors.push(`${event.name}: ${event.error}`);
@@ -423,6 +455,7 @@ export async function exportApproved() {
       },
     );
     state.lastExport = summary;
+    complete = summary.failed === 0;
     say(
       `Exported ${summary.images} image${summary.images === 1 ? "" : "s"} from ${summary.scans - summary.failed} scan${summary.scans - summary.failed === 1 ? "" : "s"}` +
         (summary.failed ? `; ${summary.failed} failed.` : "."),
@@ -433,6 +466,7 @@ export async function exportApproved() {
   } finally {
     state.exporting.active = false;
   }
+  return complete;
 }
 
 export async function showExportFolder() {
