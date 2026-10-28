@@ -4,6 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { ThemeChoice } from "./theme";
 
 /** A box in source pixels: centre, size, and the angle of the `w` axis in degrees (clockwise on screen). */
 export interface Box {
@@ -46,6 +47,7 @@ export interface DetectSettings {
 }
 
 export interface AppSettings extends DetectSettings {
+  theme: ThemeChoice;
   format: "same" | "jpg" | "png" | "tiff";
   jpegQuality: number;
   pattern: string;

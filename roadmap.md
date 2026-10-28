@@ -123,6 +123,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [x] Undo / redo per scan (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, toolbar buttons): every box edit is one step, Re-detect is undoable, history lives while the scan is in the list.
 - [x] Closing guard: closing the window warns about approved-but-unexported scans, edits after export, edits that were not approved, and a running export (`closeGuard.ts`, `CloseDialog.vue`); unsaved settings are flushed on close. Revisit when Phase 5 persists projects.
 - [x] Collapsible scan list and side panel (Ctrl+B, Ctrl+Shift+B): slim rails keep the approved count, the to-review count, per-scan status thumbnails, the detector, the export format and a missing-models warning in view; the layout is remembered and a zoomed-in view survives a collapse.
+- [x] General settings dialog (gear in the top bar, Ctrl+,) with a theme picker: Follow system, Light or Dark; remembered, and it also sets the window title bar.
 - [ ] Keyboard: Enter = approve & advance, arrows = move through queue, Delete = remove box.
 - [ ] Flags (warnings): no item found, box touches scan edge, unusual aspect ratio/size, overlapping boxes. Auto-approve unflagged scans.
 - [ ] **Done when:** a scan can be fully corrected by mouse + keyboard without touching settings.

@@ -5,6 +5,7 @@ import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/wind
 import CloseDialog from "./components/CloseDialog.vue";
 import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
+import SettingsDialog from "./components/SettingsDialog.vue";
 import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
 import { layout, togglePanel, toggleQueue } from "./layout";
@@ -41,6 +42,7 @@ function welcomeSeen(): boolean {
 const showWelcome = ref(!welcomeSeen());
 const dragging = ref(false);
 const showClose = ref(false);
+const showSettings = ref(false);
 let unlisten: (() => void) | undefined;
 let unlistenClose: (() => void) | undefined;
 
@@ -67,14 +69,18 @@ async function onCloseRequested(event: CloseRequestedEvent) {
   else await getCurrentWindow().destroy();
 }
 
-/** Ctrl+B hides or shows the scan list, Ctrl+Shift+B the side panel. */
+/** Ctrl+B hides or shows the scan list, Ctrl+Shift+B the side panel, Ctrl+, opens the settings. */
 function onKeydown(event: KeyboardEvent) {
-  if (!event.ctrlKey || event.altKey || event.metaKey || event.key.toLowerCase() !== "b") return;
+  if (!event.ctrlKey || event.altKey || event.metaKey) return;
+  const key = event.key.toLowerCase();
+  if (key !== "b" && key !== ",") return;
   if (showWelcome.value || showClose.value) return;
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
   event.preventDefault();
-  if (event.shiftKey) togglePanel();
+  if (key === ",") showSettings.value = true;
+  else if (showSettings.value) return;
+  else if (event.shiftKey) togglePanel();
   else toggleQueue();
 }
 
@@ -127,7 +133,7 @@ onBeforeUnmount(() => {
 
     <ReviewCanvas
       :scan="selectedScan"
-      :keys-enabled="!showWelcome && !showClose"
+      :keys-enabled="!showWelcome && !showClose && !showSettings"
       @approve="approveAndAdvance"
       @step="step"
       @edit="selectedScan && updateBoxes(selectedScan, $event)"
@@ -143,6 +149,13 @@ onBeforeUnmount(() => {
       <span class="grow"></span>
       <span class="muted">{{ state.scans.length }} scans · {{ approvedCount }} approved</span>
       <span v-if="state.version" class="muted" title="OxiCut version">OxiCut {{ state.version }}</span>
+      <button class="btn ghost settings" title="Settings (Ctrl+,)" @click="showSettings = true">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+        </svg>
+        Settings
+      </button>
     </footer>
 
     <div v-if="dragging" class="drop" aria-hidden="true">
@@ -150,6 +163,8 @@ onBeforeUnmount(() => {
     </div>
 
     <WelcomeDialog v-if="showWelcome" @add-scans="addFromWelcome" @close="closeWelcome" />
+
+    <SettingsDialog v-if="showSettings" @close="showSettings = false" />
 
     <CloseDialog
       v-if="showClose"
@@ -204,6 +219,20 @@ onBeforeUnmount(() => {
 .small {
   font-size: 12px;
 }
+.settings {
+  height: 22px;
+  padding: 0 0.5rem;
+  font-size: 12px;
+}
+.settings svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .mini-bar {
   width: 120px;
   height: 4px;
@@ -219,6 +248,7 @@ onBeforeUnmount(() => {
 .status {
   grid-area: status;
   display: flex;
+  align-items: center;
   gap: 1rem;
   padding: 0.3rem 0.75rem;
   background: var(--surface);

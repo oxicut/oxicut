@@ -4,7 +4,9 @@ import { computed, reactive, watch } from "vue";
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
+import { applyTheme } from "./appearance";
 import { History, sameBoxes } from "./history";
+import { parseTheme } from "./theme";
 
 export type ScanStatus = "queued" | "detecting" | "pending" | "flagged" | "approved" | "error";
 
@@ -47,6 +49,7 @@ export const FLAG_LABELS: Record<Flag["code"], string> = {
 const AVAILABLE_DETECTORS: string[] = ["v3", "v7-lite", "v7"];
 
 export const defaultSettings: AppSettings = {
+  theme: "system",
   mode: "v7-lite",
   minAreaPercent: 2,
   maxAreaPercent: 80,
@@ -114,9 +117,12 @@ export async function initSettings() {
     Object.assign(state.settings, await api.loadSettings());
     // A detector that is not available (an old or edited settings file) falls back to the default.
     if (!AVAILABLE_DETECTORS.includes(state.settings.mode)) state.settings.mode = defaultSettings.mode;
+    state.settings.theme = parseTheme(state.settings.theme);
   } catch (e) {
     say(`Could not load settings, using defaults: ${errorText(e)}`);
   }
+  // Whatever the file said replaces the cached choice the page started with.
+  watch(() => state.settings.theme, applyTheme, { immediate: true });
   watch(
     () => ({ ...state.settings }),
     (settings) => {

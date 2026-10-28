@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
+    /// How the interface is coloured: `system` (follow Windows), `light` or `dark`.
+    pub theme: String,
     /// Detector: `v3`, `v7-lite` or `v7` (the last needs the MobileSAM models).
     pub mode: String,
     pub min_area_percent: f64,
@@ -33,6 +35,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            theme: "system".into(),
             mode: "v7-lite".into(),
             min_area_percent: 2.0,
             max_area_percent: 80.0,
@@ -101,11 +104,13 @@ mod tests {
         assert_eq!(from_old.format, "same");
         assert_eq!(from_old.pattern, "{source}-{n}");
         assert!(from_old.auto_approve);
+        assert_eq!(from_old.theme, "system");
     }
 
     #[test]
     fn settings_round_trip_through_json_with_camel_case_keys() {
         let settings = AppSettings {
+            theme: "dark".into(),
             output_dir: Some("D:\\out".into()),
             jpeg_quality: 70,
             ..Default::default()

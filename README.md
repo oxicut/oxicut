@@ -38,6 +38,7 @@ How closely the port follows the original, and every place it deviates, is writt
 - Rotatable, resizable boxes on a Fabric.js canvas, with add, split, delete and straighten tools, undo and redo per scan, and Shift to snap rotation to 90 degrees.
 - **Loupes.** A round 4x magnifier follows any resize handle you drag, and while you move or rotate a box, all four of its corners are magnified at once (one loupe in each corner of the view) so you can line up whichever corner you care about.
 - The scan list and the settings panel fold into slim rails that still show what matters: how many scans are approved and how many need review, a thumbnail per scan with its status, the detector and the export format.
+- A Settings dialog (gear icon, or `Ctrl+,`) lets you follow Windows, or always use a light or dark look.
 - Closing the window asks first if it would lose work: scans never exported, edited after export, edited without approval, or an export in progress.
 - Your originals are never modified, and existing files are never overwritten (a new file gets ` (2)` in its name).
 
