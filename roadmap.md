@@ -144,6 +144,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [ ] Settings toggle to pre-download all models; custom mirror URL.
 - [ ] macOS/Linux builds.
 - [ ] Album Splitter mode.
+- [ ] **Statistics** (builds on the Phase 5 projects: a summary of what a project or session did, kept in the project and shown in the app; also useful in the manifest and for judging the detectors on real scans). Counts to cover: scans added, processed, failed and skipped; items detected in total and per scan; how many boxes were left as detected, edited (moved, resized, rotated, straightened), added by hand, deleted or split; scans auto-approved against approved by hand, and scans that needed review (and for which flag); items exported against not exported, with output format and size; which detector ran (v3, v7-lite or v7) and which model files (name and checksum) when v7 was used; how many scans were re-detected; time spent detecting. Local only, never sent anywhere.
 
 ## Phase 7: Distribution
 
