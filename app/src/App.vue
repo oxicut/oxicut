@@ -193,9 +193,10 @@ onBeforeUnmount(() => {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--brand-cut);
 }
 .brand span {
-  color: var(--accent);
+  color: var(--brand-oxi);
 }
 .grow {
   flex: 1;

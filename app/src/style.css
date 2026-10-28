@@ -1,19 +1,26 @@
+/*
+ * Palette: neutral greys (so photos are judged on a colour-true surround), one muted steel-blue accent
+ * for the interface, conventional status colours. The rust of the logo and of the box outlines is
+ * deliberately separate (--brand-*), so restyling the interface never touches the logo.
+ */
 :root {
   color-scheme: light;
-  --bg: #f3f2ef;
-  --surface: #ffffff;
-  --surface-2: #ebe9e4;
-  --border: #d8d5ce;
-  --text: #1d1c1a;
-  --muted: #6d6a63;
-  --accent: #c8501e;
+  --bg: #e8e9eb;
+  --surface: #f5f5f6;
+  --surface-2: #e0e1e4;
+  --border: #c8cbd0;
+  --text: #1f2328;
+  --muted: #5d6570;
+  --accent: #2d6089;
   --accent-text: #ffffff;
-  --accent-soft: #fbe6dc;
-  --ok: #2f7d4f;
-  --ok-soft: #dcf0e3;
-  --warn: #a8660a;
-  --warn-soft: #fbecd0;
-  --stage: #dedbd4;
+  --accent-soft: #d9e6f1;
+  --ok: #2a7049;
+  --ok-soft: #d9eadf;
+  --warn: #865000;
+  --warn-soft: #f1e4cc;
+  --stage: #cbcdd1;
+  --brand-oxi: #c8501e;
+  --brand-cut: #1d1c1a;
   --divider: 2px;
   font-family: "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
@@ -22,39 +29,43 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #161514;
-    --surface: #201f1d;
-    --surface-2: #2a2927;
-    --border: #3a3835;
-    --text: #ecebe7;
-    --muted: #9d9a92;
-    --accent: #e8703a;
-    --accent-text: #1a0e07;
-    --accent-soft: #3a2316;
-    --ok: #62c28a;
-    --ok-soft: #1c3226;
-    --warn: #e5a03d;
-    --warn-soft: #382a12;
-    --stage: #0f0f0e;
+    --bg: #1a1b1d;
+    --surface: #232427;
+    --surface-2: #2d2f33;
+    --border: #3c3f45;
+    --text: #e4e6e9;
+    --muted: #9aa1ab;
+    --accent: #6ba3d0;
+    --accent-text: #0c1823;
+    --accent-soft: #223347;
+    --ok: #6dbf90;
+    --ok-soft: #1e3226;
+    --warn: #d8a542;
+    --warn-soft: #382f17;
+    --stage: #111214;
+    --brand-oxi: #e8703a;
+    --brand-cut: #ecebe7;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #161514;
-  --surface: #201f1d;
-  --surface-2: #2a2927;
-  --border: #3a3835;
-  --text: #ecebe7;
-  --muted: #9d9a92;
-  --accent: #e8703a;
-  --accent-text: #1a0e07;
-  --accent-soft: #3a2316;
-  --ok: #62c28a;
-  --ok-soft: #1c3226;
-  --warn: #e5a03d;
-  --warn-soft: #382a12;
-  --stage: #0f0f0e;
+  --bg: #1a1b1d;
+  --surface: #232427;
+  --surface-2: #2d2f33;
+  --border: #3c3f45;
+  --text: #e4e6e9;
+  --muted: #9aa1ab;
+  --accent: #6ba3d0;
+  --accent-text: #0c1823;
+  --accent-soft: #223347;
+  --ok: #6dbf90;
+  --ok-soft: #1e3226;
+  --warn: #d8a542;
+  --warn-soft: #382f17;
+  --stage: #111214;
+  --brand-oxi: #e8703a;
+  --brand-cut: #ecebe7;
 }
 
 * {

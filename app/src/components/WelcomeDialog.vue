@@ -25,7 +25,7 @@ async function fetchModels() {
 <template>
   <div class="backdrop">
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
-      <h1 id="welcome-title">Welcome to <span>Oxi</span>Cut</h1>
+      <h1 id="welcome-title">Welcome to <span class="logo"><span>Oxi</span>Cut</span></h1>
       <p>OxiCut splits flatbed scans of photo prints and postcards into separate, straightened images.</p>
       <ol>
         <li><strong>Add</strong> scans or a whole folder: use the button, or drop them on the window.</li>
@@ -93,8 +93,11 @@ h1 {
   font-size: 26px;
   letter-spacing: -0.02em;
 }
-h1 span {
-  color: var(--accent);
+.logo {
+  color: var(--brand-cut);
+}
+.logo span {
+  color: var(--brand-oxi);
 }
 p,
 ol {
