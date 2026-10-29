@@ -17,7 +17,8 @@ export interface LightboxItem {
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import * as api from "../api";
 import { boxesKey } from "../closeGuard";
-import { say, exportOptions } from "../store";
+import { resizeBox, type SizeChange } from "../cropSize";
+import { exportOptions, resizeCrop, say, undo } from "../store";
 
 const props = defineProps<{ items: LightboxItem[]; index: number }>();
 const emit = defineEmits<{ close: []; "update:index": [index: number] }>();
@@ -100,6 +101,29 @@ function showInFolder() {
   if (real.value) api.revealInExplorer(real.value.path).catch(() => say("That folder could not be opened."));
 }
 
+// ---- cutting the crop closer or wider: the box itself changes, so the marquee on the scan does too
+/** Set when the final result was showing, so it is prepared again for the new size. */
+let refreshFinal = false;
+
+const canResize = (change: SizeChange) => !!item.value && !item.value.scan.missing && !cutting.value && !!resizeBox(item.value.box, change, item.value.scan);
+const canCloser = computed(() => canResize("closer"));
+const canWider = computed(() => canResize("wider"));
+const canUndo = computed(() => !!item.value && !cutting.value && item.value.scan.history.canUndo);
+
+function resize(change: SizeChange) {
+  const current = item.value;
+  if (!current) return;
+  refreshFinal = showing.value === "real";
+  if (!resizeCrop(current.scan, current.box.id, change)) refreshFinal = false;
+}
+
+function undoLast() {
+  const current = item.value;
+  if (!current) return;
+  refreshFinal = showing.value === "real";
+  undo(current.scan);
+}
+
 // ---- moving between crops
 const step = (delta: number) => {
   const next = props.index + delta;
@@ -115,11 +139,15 @@ function onKey(event: KeyboardEvent) {
   event.stopPropagation();
 }
 
+// Another crop, or the same one with a new size: look again.
 watch(
-  () => [props.index, item.value?.name],
-  () => {
+  () => [props.index, item.value?.name, item.value ? boxesKey([item.value.box]) : ""],
+  async () => {
     showRemembered();
-    void loadPreview();
+    const again = refreshFinal;
+    refreshFinal = false;
+    await loadPreview();
+    if (again) await showFinalResult();
   },
   { immediate: true },
 );
@@ -152,7 +180,25 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey, true));
     </p>
     <p v-else-if="cutError && picture" class="facts problem">{{ cutError }}</p>
 
-    <div class="final" role="group" aria-label="The final result of this crop">
+    <div class="final" role="group" aria-label="Adjust this crop and see the final result">
+      <button
+        class="btn"
+        :disabled="!canCloser"
+        :title="canCloser ? 'Cut a little more off every edge, for example to lose a white border' : 'The crop cannot get any smaller'"
+        @click="resize('closer')"
+      >
+        Cut closer
+      </button>
+      <button
+        class="btn"
+        :disabled="!canWider"
+        :title="canWider ? 'Include a little more around every edge' : 'The crop already reaches the edge of the scan'"
+        @click="resize('wider')"
+      >
+        Cut wider
+      </button>
+      <button class="btn" :disabled="!canUndo" title="Undo the last change to this crop" @click="undoLast">Undo</button>
+      <span class="divider" aria-hidden="true"></span>
       <button
         class="btn"
         :class="{ primary: !real }"
@@ -249,9 +295,16 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey, true));
 }
 .final {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 0.75rem;
+  gap: 0.5rem 0.75rem;
+}
+.divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0.15rem 0.25rem;
+  background: rgb(255 255 255 / 0.25);
 }
 .label {
   display: grid;

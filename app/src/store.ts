@@ -6,6 +6,7 @@ import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
 import { applyTheme } from "./appearance";
+import { resizeBox, type SizeChange } from "./cropSize";
 import { turnBox } from "./cropTurn";
 import { History, sameBoxes } from "./history";
 import { parseTheme } from "./theme";
@@ -375,6 +376,15 @@ function editFromCrops(scan: ScanItem, boxes: BoxItem[]) {
 /** Turn the crop of one box a quarter turn; the box on the scan looks the same but the exported picture is turned. */
 export function turnCrop(scan: ScanItem, boxId: number, direction: "left" | "right") {
   editFromCrops(scan, scan.boxes.map((b) => (b.id === boxId ? turnBox(b, direction) : b)));
+}
+
+/** Cut a crop closer or wider: every edge of its box moves a little, the centre and angle stay. `false` when that is not possible. */
+export function resizeCrop(scan: ScanItem, boxId: number, change: SizeChange): boolean {
+  const box = scan.boxes.find((b) => b.id === boxId);
+  const next = box ? resizeBox(box, change, scan) : null;
+  if (!next) return false;
+  editFromCrops(scan, scan.boxes.map((b) => (b.id === boxId ? next : b)));
+  return true;
 }
 
 /** Remove one box (and so its crop). */
