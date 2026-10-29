@@ -19,6 +19,8 @@ concurrency:
 
 jobs:
   installer:
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     runs-on: windows-latest
     defaults:
       run:
@@ -81,16 +83,36 @@ jobs:
           cp "$installer" release/OxiCut-setup.exe
           (cd release && sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: release/*
+          if-no-files-found: error
+
+  publish:
+    needs: installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer
+          path: release
+
       - name: Replace the release
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ inputs.prerelease }}
+          VERSION: ${{ needs.installer.outputs.version }}
         run: |
-          tag="v${{ steps.version.outputs.version }}"
+          tag="v$VERSION"
           gh release delete "$tag" --cleanup-tag --yes || true
           flag=""
           if [ "$PRERELEASE" = "true" ]; then flag="--prerelease"; fi
-          cat > notes.md <<'EOF'
+          cat > notes.md <<'NOTES'
           OxiCut cuts scanned photos and postcards apart into separate, straightened pictures.
 
           **To install:** download `OxiCut-setup.exe` below and open it.
@@ -98,5 +120,5 @@ jobs:
           This is a test version and the installer is not signed yet, so Windows may show a blue
           "Windows protected your PC" window. Choose "More info", then "Run anyway". Your scans are
           never changed.
-          EOF
-          gh release create "$tag" release/* --target "$GITHUB_SHA" --title "OxiCut ${tag#v}" --notes-file notes.md $flag
+          NOTES
+          gh release create "$tag" release/* --target "$GITHUB_SHA" --title "OxiCut $VERSION" --notes-file notes.md $flag
