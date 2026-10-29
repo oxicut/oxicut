@@ -3,7 +3,7 @@
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { ThemeChoice } from "./theme";
 
 /** A box in source pixels: centre, size, and the angle of the `w` axis in degrees (clockwise on screen). */
@@ -216,6 +216,7 @@ export const saveSettings = (settings: AppSettings) => invoke<void>("save_settin
 export const modelsStatus = () => invoke<ModelStatus[]>("models_status");
 export const modelsFolder = () => invoke<string>("models_folder");
 export const appVersion = () => invoke<string>("app_version");
+export const appRepository = () => invoke<string>("app_repository");
 export const downloadModels = (ids: string[], onEvent: (e: DownloadEvent) => void) =>
   invoke<void>("download_models", { ids, onEvent: channel(onEvent) });
 
@@ -241,6 +242,9 @@ export async function pickFolder(): Promise<string | null> {
 }
 
 export const revealInExplorer = (path: string) => revealItemInDir(path);
+
+/** Open a web address in the user's browser. */
+export const openLink = (url: string) => openUrl(url);
 
 /** Readable size, e.g. "27 MB". */
 export function formatBytes(bytes: number): string {

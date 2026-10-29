@@ -238,6 +238,12 @@ fn app_version() -> &'static str {
     oxicut_core::VERSION
 }
 
+/// The project's web address, for the About window.
+#[tauri::command]
+fn app_repository() -> &'static str {
+    oxicut_core::REPOSITORY
+}
+
 /// Where downloaded models live, for display.
 #[tauri::command]
 fn models_folder() -> Result<String, String> {
@@ -301,6 +307,7 @@ pub fn run() {
             models_status,
             models_folder,
             app_version,
+            app_repository,
             download_models,
         ])
         .run(tauri::generate_context!())

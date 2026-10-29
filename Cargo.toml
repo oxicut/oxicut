@@ -19,6 +19,8 @@ version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Janos Rusiczki <janos.rusiczki@gmail.com>"]
+repository = "https://github.com/oxicut/oxicut"
+homepage = "https://github.com/oxicut/oxicut"
 
 [workspace.dependencies]
 oxicut-core = { path = "crates/oxicut-core" }

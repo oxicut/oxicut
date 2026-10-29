@@ -92,6 +92,7 @@ export const state = reactive({
   models: [] as ModelStatus[],
   modelsFolder: "",
   version: "",
+  repository: "",
   modelProgress: {} as Record<string, { downloaded: number; total: number | null }>,
   modelErrors: {} as Record<string, string>,
 });
@@ -771,6 +772,7 @@ async function openStartProject(wanted: string | null) {
 export async function initApp() {
   await initSettings();
   void api.appVersion().then((v) => (state.version = v));
+  void api.appRepository().then((url) => (state.repository = url));
   void refreshModels();
   let launch: api.StartupArgs = { project: null, scans: [] };
   try {

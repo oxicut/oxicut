@@ -6,6 +6,9 @@
 /// exported images. Hardcoded for now; it will come from the build later.
 pub const VERSION: &str = "0.0.1";
 
+/// Where the project lives on the web (the one address, set in the workspace `Cargo.toml`).
+pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+
 pub mod background;
 pub mod bench;
 pub mod candidates;
