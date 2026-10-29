@@ -11,7 +11,8 @@ import {
   type Point2,
 } from "../loupe";
 import ViewSwitch from "./ViewSwitch.vue";
-import { FLAG_LABELS, newBoxId, previewFor, type BoxItem, type ScanItem } from "../store";
+import { resizeBox, type SizeChange } from "../cropSize";
+import { FLAG_LABELS, newBoxId, previewFor, resizeCrop, type BoxItem, type ScanItem } from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
 const emit = defineEmits<{
@@ -32,6 +33,9 @@ const loading = ref(false);
 const loadError = ref("");
 const boxCount = ref(0);
 const hasSelection = ref(false);
+// Whether the selected box can be cut closer or wider (the buttons grey out at the limits).
+const canCloser = ref(false);
+const canWider = ref(false);
 const zoomPercent = ref(100);
 // A scan that cannot be found has no canvas to count on, so its saved boxes are the answer.
 const shownBoxes = computed(() => (props.scan?.missing ? props.scan.boxes.length : boxCount.value));
@@ -56,6 +60,11 @@ function marquees(): Rect[] {
 function syncState() {
   boxCount.value = marquees().length;
   hasSelection.value = (canvas?.getActiveObjects() ?? []).some((o) => ids.has(o));
+  const [target] = selectedMarquees();
+  const scan = props.scan;
+  const box = target && { cx: target.left, cy: target.top, w: target.width * target.scaleX, h: target.height * target.scaleY, angle: target.angle };
+  canCloser.value = !!(box && scan && resizeBox(box, "closer", scan));
+  canWider.value = !!(box && scan && resizeBox(box, "wider", scan));
 }
 
 /** Line thickness that stays about 2.5 screen pixels at any zoom. */
@@ -401,6 +410,13 @@ function splitSelected() {
   commit();
 }
 
+/** Move every edge of the selected box a little in or out (the same step as in the larger view of a crop). */
+function resizeSelected(change: SizeChange) {
+  const [target] = selectedMarquees();
+  const id = target && ids.get(target);
+  if (id !== undefined && props.scan) resizeCrop(props.scan, id, change);
+}
+
 function straighten() {
   if (!canvas) return;
   for (const target of selectedMarquees()) {
@@ -600,6 +616,15 @@ watch(() => props.scan?.flags, restyle, { deep: true });
         <button class="tool" :disabled="!hasSelection" title="Snap the selected box to the nearest 90°" @click="straighten">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="8" width="12" height="9" rx="1" /><path d="M4 5.5A9 9 0 0 1 12 3M12 3l-2.5-.5M12 3l-.5 2.5" /></svg>
           Straighten
+        </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="tool" :disabled="!canCloser" title="Cut the selected box a little closer: every edge moves in, for example to lose a white border" @click="resizeSelected('closer')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="8" height="8" /><path d="M12 2v4M10 4.5l2 2 2-2M12 22v-4M10 19.5l2-2 2 2M2 12h4M4.5 10l2 2-2 2M22 12h-4M19.5 10l-2 2 2 2" /></svg>
+          Closer
+        </button>
+        <button class="tool" :disabled="!canWider" title="Cut the selected box a little wider: every edge moves out" @click="resizeSelected('wider')">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" /><path d="M12 6V2M10 3.5l2-2 2 2M12 18v4M10 20.5l2 2 2-2M6 12H2M3.5 10l-2 2 2 2M18 12h4M20.5 10l2 2-2 2" /></svg>
+          Wider
         </button>
       </nav>
 
