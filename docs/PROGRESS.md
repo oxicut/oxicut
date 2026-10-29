@@ -141,3 +141,7 @@ The quick look in the Crops view comes from the screen preview. For checking the
 This is the one-crop, on-demand version of the "export candidates to a scratch folder" idea: about a quarter of a second for one crop (see the export timings), instead of exporting everything up front.
 
 `export_regions` now goes through a small `ScanExport` helper (`oxicut-core::export`), which the real cut uses too, so the two cannot drift apart: a test checks the scratch file is byte for byte the file the export writes for the same box.
+
+## Phase 5: Cut closer and Cut wider (2026-10-30)
+
+The larger view of a crop can now adjust the crop without leaving it: **Cut closer** and **Cut wider** move every edge of the box in or out by 1% of the crop's shorter side (at least one pixel; 22 px for a 2200 x 3200 crop, 3 px for a small one). The box keeps its centre and angle, so the rotated marquee on the scan changes too, each click is one undo step (an **Undo** button sits beside them), and the picture refreshes; if the final result was showing it is prepared again. Closer stops before a side gets under 16 px, wider stops where the box would reach past the edge of the scan. The rules are in `cropSize.ts` and tested (`cropSize.test.ts`).
