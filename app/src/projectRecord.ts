@@ -13,6 +13,7 @@ export interface SavedScan {
   boxes: Box[];
   detectedKey: string;
   exportedKey: string | null;
+  exportedFiles: string[];
   error: string | null;
 }
 
@@ -34,6 +35,7 @@ export function toRecord(scan: SavedScan): ScanRecord {
     boxes: scan.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })),
     detectedKey: scan.detectedKey,
     exportedKey: scan.exportedKey,
+    exportedFiles: [...scan.exportedFiles],
     error: scan.error,
   };
 }
@@ -54,6 +56,7 @@ export function fromRecord(record: Partial<ScanRecord> & { id: number; path: str
     boxes: boxes.map((b) => ({ cx: b.cx, cy: b.cy, w: b.w, h: b.h, angle: b.angle })),
     detectedKey: record.detectedKey ?? "",
     exportedKey: record.exportedKey ?? null,
+    exportedFiles: Array.isArray(record.exportedFiles) ? record.exportedFiles.filter((f) => typeof f === "string") : [],
     error: record.error ?? null,
   };
 }

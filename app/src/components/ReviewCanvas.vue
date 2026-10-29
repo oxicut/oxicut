@@ -10,6 +10,7 @@ import {
   type LoupePlace,
   type Point2,
 } from "../loupe";
+import ViewSwitch from "./ViewSwitch.vue";
 import { FLAG_LABELS, newBoxId, previewFor, type BoxItem, type ScanItem } from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
@@ -524,6 +525,8 @@ onMounted(() => {
 
   observer = new ResizeObserver(() => {
     if (!canvas || !host.value) return;
+    // Hidden (the Crops view is showing): there is no size to adapt to, and the view must stay as it was.
+    if (host.value.clientWidth === 0 || host.value.clientHeight === 0) return;
     const [wasWidth, wasHeight] = [canvas.getWidth(), canvas.getHeight()];
     canvas.setDimensions({ width: host.value.clientWidth, height: host.value.clientHeight });
     if (fitted) {
@@ -561,6 +564,7 @@ watch(() => props.scan?.flags, restyle, { deep: true });
   <section class="review">
     <header class="toolbar">
       <div class="group">
+        <ViewSwitch />
         <button class="btn" :disabled="!scan?.history.canUndo" title="Undo (Ctrl+Z)" @click="emit('undo')">
           Undo
         </button>
@@ -633,10 +637,11 @@ watch(() => props.scan?.flags, restyle, { deep: true });
     <footer class="infobar">
       <template v-if="scan">
         <strong class="name">{{ scan.name }}</strong>
+        <span v-if="ready" class="muted">{{ scan.width }} × {{ scan.height }} px</span>
         <span class="chip" :class="{ ok: scan.status === 'approved', warn: scan.status === 'flagged' || scan.status === 'error' }">
           {{ scan.status }}
         </span>
-        <span v-if="ready" class="muted">{{ shownBoxes }} {{ shownBoxes === 1 ? "item" : "items" }} · {{ scan.width }}×{{ scan.height }} px</span>
+        <span v-if="ready" class="muted">{{ shownBoxes }} {{ shownBoxes === 1 ? "item" : "items" }}</span>
         <span v-for="message in flagMessages" :key="message" class="chip warn">{{ message }}</span>
       </template>
       <span class="grow"></span>

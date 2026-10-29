@@ -5,15 +5,18 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use oxicut_core::RotatedRect;
-use oxicut_core::export::{Collision, ExportSettings, OutputFormat, export_regions};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+use oxicut_core::export::{Collision, ExportSettings, OutputFormat, ScanExport, export_regions};
 use oxicut_core::flags::{IdentifiedBox, evaluate_scan};
 use oxicut_core::io::load_image;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::engine::{BoxDto, DetectSettings, Detector, ScanAnalysis, analyze_scan};
+use crate::engine::{BoxDto, DetectSettings, Detector, ScanAnalysis, analyze_scan, jpeg_bytes};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(
@@ -160,6 +163,10 @@ pub enum ExportEvent {
     Finished {
         index: usize,
         files: Vec<String>,
+        /// Size on disk of each file, in the same order.
+        sizes: Vec<u64>,
+        /// How long this scan took, in milliseconds.
+        millis: u64,
     },
     Failed {
         index: usize,
@@ -213,6 +220,7 @@ pub fn export_batch(
             total: items.len(),
             name: name.clone(),
         });
+        let started = Instant::now();
 
         let out_dir = match &options.output_dir {
             Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
@@ -221,15 +229,8 @@ pub fn export_batch(
                 .unwrap_or(Path::new("."))
                 .join("OxiCut output"),
         };
-        let settings = ExportSettings {
-            format,
-            jpeg_quality: options.jpeg_quality,
-            pattern: options.pattern.clone(),
-            keep_metadata: options.keep_metadata,
-            tag_software: options.tag_software,
-            // Exports never overwrite earlier ones: the user may have kept or renamed them.
-            collision: Collision::Rename,
-        };
+        // Exports never overwrite earlier ones: the user may have kept or renamed them.
+        let settings = export_settings(options, format, Collision::Rename);
         let regions: Vec<RotatedRect> = item
             .boxes
             .iter()
@@ -254,7 +255,16 @@ pub fn export_batch(
                     summary.first_file = files.first().cloned();
                     summary.folder = Some(out_dir.to_string_lossy().into_owned());
                 }
-                emit(ExportEvent::Finished { index, files });
+                let sizes = files
+                    .iter()
+                    .map(|f| std::fs::metadata(f).map(|m| m.len()).unwrap_or(0))
+                    .collect();
+                emit(ExportEvent::Finished {
+                    index,
+                    files,
+                    sizes,
+                    millis: started.elapsed().as_millis() as u64,
+                });
             }
             Err(error) => {
                 summary.failed += 1;
@@ -263,6 +273,108 @@ pub fn export_batch(
         }
     }
     Ok(summary)
+}
+
+/// One box cut at full resolution, as the export would write it, but into a scratch folder: for
+/// looking at the real result of a crop before exporting anything.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinalCrop {
+    /// The file in the scratch folder.
+    pub path: String,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: u64,
+    /// `jpg`, `png` or `tif`.
+    pub format: String,
+    pub millis: u64,
+    /// A picture the screen can show: the file itself for JPEG and PNG, a full-size JPEG copy of it
+    /// for TIFF (which a browser cannot display).
+    pub data_url: String,
+    pub shown_as_copy: bool,
+}
+
+/// How long files stay in the scratch folder.
+const SCRATCH_KEEP: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Delete scratch files older than `max_age`; best effort.
+fn prune_scratch(dir: &Path, max_age: std::time::Duration) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let old = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|modified| modified.elapsed().ok())
+            .is_some_and(|age| age > max_age);
+        if old {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// The settings an export with `options` uses, with the way to treat files that already exist.
+fn export_settings(options: &ExportOptions, format: OutputFormat, collision: Collision) -> ExportSettings {
+    ExportSettings {
+        format,
+        jpeg_quality: options.jpeg_quality,
+        pattern: options.pattern.clone(),
+        keep_metadata: options.keep_metadata,
+        tag_software: options.tag_software,
+        collision,
+    }
+}
+
+/// Cut print number `number` of the scan at `source` for real, with the export settings, into
+/// `scratch_dir` (replacing the file a former call left there).
+pub fn final_crop(
+    source: &Path,
+    region: &BoxDto,
+    number: usize,
+    options: &ExportOptions,
+    scratch_dir: &Path,
+) -> Result<FinalCrop, String> {
+    let started = Instant::now();
+    let format = parse_format(&options.format)?;
+    prune_scratch(scratch_dir, SCRATCH_KEEP);
+    let name = source
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| source.display().to_string());
+    let image = load_image(source).map_err(|e| format!("Could not read {name}: {e}"))?;
+    let settings = export_settings(options, format, Collision::Overwrite);
+    let rect = RotatedRect::new(region.cx, region.cy, region.w, region.h, region.angle);
+    let written = ScanExport::new(source, scratch_dir, &settings)
+        .and_then(|export| export.write(&image, &rect, number))
+        .map_err(|e| e.to_string())?
+        .ok_or("This box lies outside the scan, so there is nothing to cut.")?;
+
+    let path = written.file.path;
+    let extension = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let bytes = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    let (data_url, shown_as_copy) = match extension.as_str() {
+        "jpg" | "png" => {
+            let mime = if extension == "png" { "image/png" } else { "image/jpeg" };
+            let data = std::fs::read(&path).map_err(|e| format!("could not read the cut: {e}"))?;
+            (format!("data:{mime};base64,{}", STANDARD.encode(data)), false)
+        }
+        _ => {
+            let copy = jpeg_bytes(&written.crop.to_rgb8(), 92)?;
+            (format!("data:image/jpeg;base64,{}", STANDARD.encode(copy)), true)
+        }
+    };
+    Ok(FinalCrop {
+        path: path.to_string_lossy().into_owned(),
+        width: written.file.width,
+        height: written.file.height,
+        bytes,
+        format: extension,
+        millis: started.elapsed().as_millis() as u64,
+        data_url,
+        shown_as_copy,
+    })
 }
 
 #[cfg(test)]
@@ -290,6 +402,83 @@ mod tests {
             }
         }
         scan.save(path).unwrap();
+    }
+
+    fn options(format: &str) -> ExportOptions {
+        ExportOptions {
+            format: format.into(),
+            jpeg_quality: 90,
+            pattern: "{source}-{n}".into(),
+            keep_metadata: true,
+            tag_software: true,
+            output_dir: None,
+        }
+    }
+
+    const PRINT: BoxDto = BoxDto { cx: 280.0, cy: 350.0, w: 360.0, h: 460.0, angle: 0.0 };
+
+    #[test]
+    fn the_real_cut_is_the_file_an_export_would_write_and_is_made_again_in_place() {
+        let dir = scratch("final-png");
+        let scan = dir.join("holiday.png");
+        write_scan(&scan);
+        let scratch_dir = dir.join("scratch");
+
+        let cut = final_crop(&scan, &PRINT, 3, &options("png"), &scratch_dir).unwrap();
+        // Named like the export names it (print number 3), full size, a PNG that is shown as it is.
+        assert_eq!(Path::new(&cut.path), scratch_dir.join("holiday-3.png"));
+        assert_eq!((cut.width, cut.height), (360, 460));
+        assert_eq!(cut.format, "png");
+        assert!(cut.bytes > 0 && !cut.shown_as_copy);
+        let shown = STANDARD.decode(cut.data_url.trim_start_matches("data:image/png;base64,")).unwrap();
+        assert_eq!(shown, std::fs::read(&cut.path).unwrap());
+
+        // Byte for byte what the real export writes for the same box.
+        let export_dir = dir.join("exported");
+        let settings = export_settings(&options("png"), OutputFormat::Png, Collision::Rename);
+        let image = load_image(&scan).unwrap();
+        let rect = RotatedRect::new(PRINT.cx, PRINT.cy, PRINT.w, PRINT.h, PRINT.angle);
+        let written = export_regions(&image, &scan, &[rect], &export_dir, &settings).unwrap();
+        assert_eq!(std::fs::read(&written[0].path).unwrap(), std::fs::read(&cut.path).unwrap());
+
+        // Cutting again replaces the file instead of piling up " (2)" copies.
+        final_crop(&scan, &PRINT, 3, &options("png"), &scratch_dir).unwrap();
+        assert_eq!(std::fs::read_dir(&scratch_dir).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_tiff_cut_is_shown_through_a_full_size_jpeg_copy() {
+        let dir = scratch("final-tiff");
+        let scan = dir.join("holiday.png");
+        write_scan(&scan);
+        let cut = final_crop(&scan, &PRINT, 1, &options("tiff"), &dir.join("scratch")).unwrap();
+        assert_eq!(cut.format, "tif");
+        assert!(cut.shown_as_copy && cut.data_url.starts_with("data:image/jpeg;base64,"));
+        let copy = STANDARD.decode(cut.data_url.trim_start_matches("data:image/jpeg;base64,")).unwrap();
+        let picture = image::load_from_memory(&copy).unwrap();
+        assert_eq!((picture.width(), picture.height()), (360, 460));
+    }
+
+    #[test]
+    fn a_box_outside_the_scan_is_explained_not_cut() {
+        let dir = scratch("final-outside");
+        let scan = dir.join("holiday.png");
+        write_scan(&scan);
+        let outside = BoxDto { cx: 9000.0, cy: 9000.0, w: 100.0, h: 100.0, angle: 0.0 };
+        let error = final_crop(&scan, &outside, 1, &options("png"), &dir.join("scratch")).unwrap_err();
+        assert!(error.contains("outside the scan"), "{error}");
+    }
+
+    #[test]
+    fn old_scratch_files_are_cleaned_up_and_recent_ones_kept() {
+        let dir = scratch("final-prune");
+        let (old, recent) = (dir.join("old.png"), dir.join("recent.png"));
+        std::fs::write(&old, b"x").unwrap();
+        std::fs::write(&recent, b"x").unwrap();
+        let two_days = std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 24 * 60 * 60);
+        std::fs::File::options().write(true).open(&old).unwrap().set_modified(two_days).unwrap();
+        prune_scratch(&dir, SCRATCH_KEEP);
+        assert!(!old.exists() && recent.exists());
     }
 
     /// A sink that records every event, shareable across the detector's threads.

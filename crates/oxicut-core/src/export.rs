@@ -319,6 +319,91 @@ pub struct ExportedFile {
     pub height: u32,
 }
 
+/// What stays the same for every crop of one scan: where it is written and how. Built once, so the
+/// scan's metadata is read once, and used by the real export and by the single "real cut" preview alike.
+pub struct ScanExport<'a> {
+    source_path: &'a Path,
+    out_dir: &'a Path,
+    settings: &'a ExportSettings,
+    stem: String,
+    format: OutputFormat,
+    source_canonical: Option<PathBuf>,
+    metadata: Metadata,
+}
+
+/// A crop that was written, with the picture that went into the file.
+pub struct WrittenCrop {
+    pub file: ExportedFile,
+    pub crop: DynamicImage,
+}
+
+impl<'a> ScanExport<'a> {
+    /// Prepare to write crops of `source_path` into `out_dir` (made if missing).
+    pub fn new(
+        source_path: &'a Path,
+        out_dir: &'a Path,
+        settings: &'a ExportSettings,
+    ) -> Result<Self, ExportError> {
+        std::fs::create_dir_all(out_dir).map_err(|e| ExportError::Write {
+            path: out_dir.to_path_buf(),
+            message: e.to_string(),
+        })?;
+        let stem = source_path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "scan".into());
+        let metadata = Metadata {
+            tag_software: settings.tag_software,
+            ..if settings.keep_metadata {
+                Metadata::read(source_path)
+            } else {
+                Metadata::default()
+            }
+        };
+        Ok(Self {
+            source_path,
+            out_dir,
+            settings,
+            stem,
+            format: settings.format.resolve(source_path),
+            source_canonical: source_path.canonicalize().ok(),
+            metadata,
+        })
+    }
+
+    /// Cut `region` out of `image` and write it as print number `number` (counting from 1, which is
+    /// what the file name gets). `None` when the region lies outside the scan.
+    pub fn write(
+        &self,
+        image: &DynamicImage,
+        region: &RotatedRect,
+        number: usize,
+    ) -> Result<Option<WrittenCrop>, ExportError> {
+        let Some(crop) = crop_region(image, region) else {
+            return Ok(None);
+        };
+        let name = expand_pattern(&self.settings.pattern, &self.stem, number);
+        let path = target_path(
+            self.out_dir,
+            &name,
+            self.format.extension(),
+            self.settings.collision,
+        );
+        if let (Some(a), Ok(b)) = (&self.source_canonical, path.canonicalize())
+            && *a == b
+        {
+            return Err(ExportError::WouldOverwriteSource(self.source_path.to_path_buf()));
+        }
+        save_image(&crop, &path, self.format, self.settings.jpeg_quality, &self.metadata)?;
+        let file = ExportedFile {
+            path,
+            width: crop.width(),
+            height: crop.height(),
+        };
+        Ok(Some(WrittenCrop { file, crop }))
+    }
+}
+
 /// Crop every region out of `image` (the full-resolution scan read from
 /// `source_path`) and write them to `out_dir`. Regions that fall outside the
 /// scan are skipped. The source scan is never touched.
@@ -329,43 +414,12 @@ pub fn export_regions(
     out_dir: &Path,
     settings: &ExportSettings,
 ) -> Result<Vec<ExportedFile>, ExportError> {
-    std::fs::create_dir_all(out_dir).map_err(|e| ExportError::Write {
-        path: out_dir.to_path_buf(),
-        message: e.to_string(),
-    })?;
-    let stem = source_path
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "scan".into());
-    let format = settings.format.resolve(source_path);
-    let source_canonical = source_path.canonicalize().ok();
-    let metadata = Metadata {
-        tag_software: settings.tag_software,
-        ..if settings.keep_metadata {
-            Metadata::read(source_path)
-        } else {
-            Metadata::default()
-        }
-    };
-
+    let export = ScanExport::new(source_path, out_dir, settings)?;
     let mut written = Vec::new();
     for (index, region) in regions.iter().enumerate() {
-        let Some(crop) = crop_region(image, region) else {
-            continue;
-        };
-        let name = expand_pattern(&settings.pattern, &stem, index + 1);
-        let path = target_path(out_dir, &name, format.extension(), settings.collision);
-        if let (Some(a), Ok(b)) = (&source_canonical, path.canonicalize())
-            && *a == b
-        {
-            return Err(ExportError::WouldOverwriteSource(source_path.to_path_buf()));
+        if let Some(done) = export.write(image, region, index + 1)? {
+            written.push(done.file);
         }
-        save_image(&crop, &path, format, settings.jpeg_quality, &metadata)?;
-        written.push(ExportedFile {
-            path,
-            width: crop.width(),
-            height: crop.height(),
-        });
     }
     Ok(written)
 }

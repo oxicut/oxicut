@@ -13,7 +13,9 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use image::RgbImage;
 use image::codecs::jpeg::JpegEncoder;
+use oxicut_core::crop::crop_region;
 use oxicut_core::detect::{DetectOptions, Detection, detect_v3};
+use oxicut_core::geometry::RotatedRect;
 use oxicut_core::io::{load_image, to_detection_rgb};
 use oxicut_core::resize::resize_area;
 use oxicut_core::v7::{detect_v7, detect_v7_lite};
@@ -178,7 +180,7 @@ fn file_name(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn jpeg_bytes(image: &RgbImage, quality: u8) -> Result<Vec<u8>, String> {
+pub fn jpeg_bytes(image: &RgbImage, quality: u8) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     JpegEncoder::new_with_quality(&mut Cursor::new(&mut bytes), quality)
         .encode(
@@ -342,6 +344,54 @@ pub fn load_thumbnail(path: &Path, cache_dir: &Path) -> Result<String, String> {
     make_thumbnail(&rgb, cache_dir, path)
 }
 
+/// One straightened crop for the Crops view.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CropImage {
+    /// `data:image/jpeg;base64,...`; empty when the box lies outside the scan.
+    pub data_url: String,
+    /// Size the exported file will have, in scan pixels (the picture shown is smaller).
+    pub width: u32,
+    pub height: u32,
+}
+
+/// The straightened crops of `boxes`, cut from the cached screen preview with the same code export
+/// uses, so what is shown is what gets written (at preview resolution). `scan_width` is the scan's
+/// real width, which tells how much smaller the preview is. Pictures are at most `side` pixels long.
+pub fn render_crops(
+    path: &Path,
+    scan_width: u32,
+    boxes: &[BoxDto],
+    side: u32,
+    cache_dir: &Path,
+) -> Result<Vec<CropImage>, String> {
+    let preview = preview_path(cache_dir, path);
+    if !preview.is_file() {
+        let name = file_name(path);
+        let image = load_image(path).map_err(|e| format!("Could not read {name}: {e}"))?;
+        write_preview(&to_detection_rgb(&image), cache_dir, path)?;
+    }
+    let image = image::open(&preview).map_err(|e| format!("could not read the preview: {e}"))?;
+    let scale = image.width() as f64 / scan_width.max(1) as f64;
+    boxes
+        .iter()
+        .map(|b| {
+            let region = RotatedRect::new(b.cx * scale, b.cy * scale, b.w * scale, b.h * scale, b.angle);
+            let data_url = match crop_region(&image, &region) {
+                Some(crop) => data_url(&jpeg_bytes(&fit(&crop.to_rgb8(), side.max(16)), 85)?),
+                None => String::new(),
+            };
+            // The exported file gets the box size rounded the way `crop_region` rounds it.
+            let size = |v: f64| v.round_ties_even().max(0.0) as u32;
+            Ok(CropImage {
+                data_url,
+                width: size(b.w),
+                height: size(b.h),
+            })
+        })
+        .collect()
+}
+
 /// The screen preview as a data URL, from the cache when it is there.
 pub fn load_preview(path: &Path, cache_dir: &Path) -> Result<String, String> {
     let cached = preview_path(cache_dir, path);
@@ -488,6 +538,66 @@ mod tests {
         assert!(thumbnail_path(&cache, &scan).is_file());
         std::fs::remove_dir_all(&cache).unwrap();
         assert!(load_thumbnail(&scan, &cache).unwrap().starts_with("data:image/jpeg;base64,"));
+        assert!(preview_path(&cache, &scan).is_file());
+    }
+
+    #[test]
+    fn crops_are_straightened_and_turning_a_box_turns_its_crop() {
+        let dir = scratch("crops");
+        let scan = dir.join("scan.png");
+        // A grey scan with one print (x 100..400, y 100..300) whose top-left corner is marked red.
+        let mut image = RgbImage::from_pixel(600, 400, Rgb([200, 200, 200]));
+        for y in 100..140 {
+            for x in 100..140 {
+                image.put_pixel(x, y, Rgb([220, 20, 20]));
+            }
+        }
+        image.save(&scan).unwrap();
+        let cache = dir.join("cache");
+        let boxes = [
+            BoxDto { cx: 250.0, cy: 200.0, w: 300.0, h: 200.0, angle: 0.0 },
+            // The same print turned clockwise: the angle drops by 90 and width and height swap.
+            BoxDto { cx: 250.0, cy: 200.0, w: 200.0, h: 300.0, angle: -90.0 },
+            // Turned counter-clockwise: the angle rises by 90.
+            BoxDto { cx: 250.0, cy: 200.0, w: 200.0, h: 300.0, angle: 90.0 },
+            // Outside the scan altogether.
+            BoxDto { cx: 5000.0, cy: 5000.0, w: 100.0, h: 100.0, angle: 0.0 },
+        ];
+        let crops = render_crops(&scan, 600, &boxes, 400, &cache).unwrap();
+        assert_eq!(crops.len(), 4);
+        assert_eq!((crops[0].width, crops[0].height), (300, 200));
+        assert_eq!((crops[1].width, crops[1].height), (200, 300));
+        assert!(crops[3].data_url.is_empty());
+
+        let pixel = |crop: &CropImage, x: u32, y: u32| {
+            let bytes = STANDARD
+                .decode(crop.data_url.trim_start_matches("data:image/jpeg;base64,"))
+                .unwrap();
+            image::load_from_memory(&bytes).unwrap().to_rgb8().get_pixel(x, y).0
+        };
+        let red = |p: [u8; 3]| p[0] > 150 && p[1] < 100 && p[2] < 100;
+        // Upright: red in the top-left. Clockwise: it moves to the top-right. Counter-clockwise: bottom-left.
+        assert!(red(pixel(&crops[0], 10, 10)) && !red(pixel(&crops[0], 290, 10)));
+        assert!(red(pixel(&crops[1], 190, 10)) && !red(pixel(&crops[1], 10, 10)));
+        assert!(red(pixel(&crops[2], 10, 290)) && !red(pixel(&crops[2], 10, 10)));
+    }
+
+    #[test]
+    fn crops_of_a_big_scan_come_from_the_smaller_preview_but_report_the_real_size() {
+        let dir = scratch("crops-big");
+        let scan = dir.join("scan.png");
+        RgbImage::from_pixel(4800, 3200, Rgb([180, 180, 180])).save(&scan).unwrap();
+        let cache = dir.join("cache");
+        let boxes = [BoxDto { cx: 2400.0, cy: 1600.0, w: 3000.0, h: 2000.0, angle: 2.0 }];
+        let crops = render_crops(&scan, 4800, &boxes, 480, &cache).unwrap();
+        // The file would be 3000 x 2000; the picture is 480 wide with the same proportions.
+        assert_eq!((crops[0].width, crops[0].height), (3000, 2000));
+        let bytes = STANDARD
+            .decode(crops[0].data_url.trim_start_matches("data:image/jpeg;base64,"))
+            .unwrap();
+        let picture = image::load_from_memory(&bytes).unwrap();
+        assert_eq!(picture.width(), 480);
+        assert!((picture.height() as i32 - 320).abs() <= 1);
         assert!(preview_path(&cache, &scan).is_file());
     }
 

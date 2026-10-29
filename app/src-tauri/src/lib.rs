@@ -161,6 +161,40 @@ async fn get_thumbnail(path: String, state: State<'_, AppState>) -> Result<Strin
         .map_err(|e| e.to_string())?
 }
 
+/// The straightened crops of a scan's boxes as small pictures, for the Crops view.
+#[tauri::command]
+async fn get_crops(
+    path: String,
+    scan_width: u32,
+    boxes: Vec<engine::BoxDto>,
+    side: u32,
+    state: State<'_, AppState>,
+) -> Result<Vec<engine::CropImage>, String> {
+    let cache = state.cache_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        engine::render_crops(&PathBuf::from(path), scan_width, &boxes, side, &cache)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Cut one box for real, with the export settings, into a scratch folder, for the lightbox.
+#[tauri::command]
+async fn final_crop(
+    path: String,
+    region: engine::BoxDto,
+    number: usize,
+    options: ExportOptions,
+    state: State<'_, AppState>,
+) -> Result<batch::FinalCrop, String> {
+    let scratch = state.cache_dir.join("final-crops");
+    tauri::async_runtime::spawn_blocking(move || {
+        batch::final_crop(&PathBuf::from(path), &region, number, &options, &scratch)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Review warnings for a scan's boxes.
 #[tauri::command]
 fn evaluate_flags(boxes: Vec<IdBox>, width: u32, height: u32) -> Vec<FlagDto> {
@@ -253,6 +287,8 @@ pub fn run() {
             project_rename,
             files_exist,
             get_thumbnail,
+            get_crops,
+            final_crop,
             expand_paths,
             detect_scans,
             cancel_detection,

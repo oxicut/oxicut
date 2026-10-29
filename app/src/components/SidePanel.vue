@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { formatBytes, revealInExplorer } from "../api";
+import { boxesKey } from "../closeGuard";
+import { baseName } from "../cropNames";
 import {
   chooseOutputFolder,
   downloadModels,
@@ -12,6 +14,7 @@ import {
   showExportFolder,
   state,
 } from "../store";
+import type { ScanItem } from "../store";
 import { layout, togglePanel } from "../layout";
 
 type Tab = "detect" | "export" | "models";
@@ -47,7 +50,21 @@ function showTab(next: Tab) {
   layout.panelCollapsed = false;
 }
 
-const openModelsFolder = () =>
+// What the exports wrote, scan by scan (the file names are kept in the project; sizes and times only for this session).
+const exportedScans = computed(() => state.scans.filter((s) => s.exportedFiles.length > 0));
+const editedSince = (scan: ScanItem) => scan.exportedKey !== boxesKey(scan.boxes);
+const revealFile = (path: string) => revealInExplorer(path).catch(() => say("That file or folder could not be found."));
+
+function exportSummary(scan: ScanItem): string {
+  const count = scan.exportedFiles.length;
+  const parts = [`${count} image${count === 1 ? "" : "s"}`];
+  if (scan.exportStats) {
+    parts.push(formatBytes(scan.exportStats.sizes.reduce((a, b) => a + b, 0)));
+  }
+  return parts.join(" · ");
+}
+
+const openModelsFolder =() =>
   state.modelsFolder && revealInExplorer(state.modelsFolder).catch(() => say("The models folder does not exist yet."));
 </script>
 
@@ -196,6 +213,26 @@ const openModelsFolder = () =>
       <ul v-if="state.exportErrors.length" class="errors">
         <li v-for="message in state.exportErrors" :key="message">{{ message }}</li>
       </ul>
+
+      <section v-if="exportedScans.length" class="exported" aria-label="Exported files">
+        <h3>Exported</h3>
+        <ul class="scans">
+          <li v-for="scan in exportedScans" :key="scan.id">
+            <div class="line">
+              <strong class="name" :title="scan.path">{{ scan.name }}</strong>
+              <span v-if="editedSince(scan)" class="chip warn" title="The boxes changed after this export, so the files are out of date">edited since</span>
+              <button class="link" @click="revealFile(scan.exportedFiles[0])">Show</button>
+            </div>
+            <span class="muted small">{{ exportSummary(scan) }}</span>
+            <ul class="files">
+              <li v-for="(file, i) in scan.exportedFiles" :key="file">
+                <button class="link" :title="file" @click="revealFile(file)">{{ baseName(file) }}</button>
+                <span v-if="scan.exportStats" class="muted small"> {{ formatBytes(scan.exportStats.sizes[i] ?? 0) }}</span>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </section>
     </div>
 
     <div v-else class="body">
@@ -345,6 +382,60 @@ const openModelsFolder = () =>
   color: var(--accent);
   text-decoration: underline;
   cursor: pointer;
+}
+.exported h3 {
+  margin: 0 0 0.4rem;
+  font-size: 13px;
+}
+.scans,
+.files {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.scans {
+  gap: 0.6rem;
+}
+.scans > li {
+  display: grid;
+  gap: 2px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.line .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.files {
+  margin-top: 0.2rem;
+  font-size: 12px;
+}
+.files li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.files li .muted {
+  flex: none;
+}
+.files .link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 .errors {
   margin: 0;

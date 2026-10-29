@@ -47,6 +47,8 @@ pub struct ScanRecord {
     pub detected_key: String,
     /// `boxesKey` of the boxes last exported successfully.
     pub exported_key: Option<String>,
+    /// The files the last export wrote for this scan.
+    pub exported_files: Vec<String>,
     pub error: Option<String>,
 }
 
@@ -304,6 +306,7 @@ mod tests {
             }],
             detected_key: "500,350,300,200,3.5".into(),
             exported_key: Some("500,350,300,200,3.5".into()),
+            exported_files: vec!["D:/out/a-1.tif".into()],
             ..Default::default()
         }
     }

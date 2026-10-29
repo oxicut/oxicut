@@ -6,6 +6,7 @@ import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
 import { applyTheme } from "./appearance";
+import { turnBox } from "./cropTurn";
 import { History, sameBoxes } from "./history";
 import { parseTheme } from "./theme";
 
@@ -34,6 +35,10 @@ export interface ScanItem {
   detectedKey: string;
   /** `boxesKey` of the boxes last exported successfully. */
   exportedKey: string | null;
+  /** The files the last export wrote for this scan (saved with the project). */
+  exportedFiles: string[];
+  /** What the last export of this scan cost in this session: milliseconds, and the size of each file. Not saved. */
+  exportStats: { millis: number; sizes: number[] } | null;
   /** The scan file could not be found when the project was opened (moved or deleted). Not saved. */
   missing: boolean;
 }
@@ -71,6 +76,10 @@ export const defaultSettings: AppSettings = {
 export const state = reactive({
   /** The project that is open: its `.oxicut` file, name (the file name) and creation time. */
   project: { path: "", name: "", created: 0 },
+  /** What the centre column shows: the scan with its boxes, or the straightened crops. */
+  view: "scan" as "scan" | "crops",
+  /** Which scans the Crops view lists. */
+  cropsScope: "scan" as "scan" | "all",
   scans: [] as ScanItem[],
   selectedId: null as number | null,
   settings: { ...defaultSettings } as AppSettings,
@@ -92,6 +101,8 @@ export const pendingCount = computed(() => state.scans.filter((s) => s.status ==
 /** What closing the window now would throw away. */
 export const closeAssessment = computed(() => assessClose(state.scans, state.exporting.active));
 const canExport = (s: ScanItem) => s.status === "approved" && s.boxes.length > 0 && !s.missing;
+/** Crops that the Crops view lists, over every scan. */
+export const cropCount = computed(() => state.scans.reduce((sum, s) => sum + s.boxes.length, 0));
 export const exportableCount = computed(() => state.scans.filter(canExport).length);
 
 let nextScanId = 1;
@@ -277,6 +288,8 @@ function makeScan(path: string): ScanItem {
     epoch: 0,
     detectedKey: "",
     exportedKey: null,
+    exportedFiles: [],
+    exportStats: null,
     missing: false,
   };
 }
@@ -351,6 +364,22 @@ const editTimers = new Map<number, number>();
 export function updateBoxes(scan: ScanItem, boxes: BoxItem[]) {
   if (!sameBoxes(scan.boxes, boxes)) scan.history.record(snapshot(scan.boxes));
   setBoxes(scan, boxes);
+}
+
+/** Change boxes from outside the canvas (the Crops view): one undo step, and the canvas shows them when it is next seen. */
+function editFromCrops(scan: ScanItem, boxes: BoxItem[]) {
+  updateBoxes(scan, boxes);
+  scan.epoch++;
+}
+
+/** Turn the crop of one box a quarter turn; the box on the scan looks the same but the exported picture is turned. */
+export function turnCrop(scan: ScanItem, boxId: number, direction: "left" | "right") {
+  editFromCrops(scan, scan.boxes.map((b) => (b.id === boxId ? turnBox(b, direction) : b)));
+}
+
+/** Remove one box (and so its crop). */
+export function removeCrop(scan: ScanItem, boxId: number) {
+  editFromCrops(scan, scan.boxes.filter((b) => b.id !== boxId));
 }
 
 /** Undo the last box edit on this scan. */
@@ -441,6 +470,19 @@ export async function chooseOutputFolder() {
   if (folder) state.settings.outputDir = folder;
 }
 
+/** The export settings as the engine takes them. */
+export function exportOptions(): api.ExportOptions {
+  const s = state.settings;
+  return {
+    format: s.format,
+    jpegQuality: s.jpegQuality,
+    pattern: s.pattern,
+    keepMetadata: s.keepMetadata,
+    tagSoftware: s.tagSoftware,
+    outputDir: s.outputDir,
+  };
+}
+
 /** Export every approved scan; `true` when all of them were written. */
 export async function exportApproved(): Promise<boolean> {
   if (state.exporting.active) return false;
@@ -449,6 +491,20 @@ export async function exportApproved(): Promise<boolean> {
     say("Nothing to export yet: approve at least one scan that has boxes.");
     return false;
   }
+  return runExport(items);
+}
+
+/** Export just this scan, approved or not (the Crops view offers it). */
+export async function exportScan(scan: ScanItem): Promise<boolean> {
+  if (state.exporting.active) return false;
+  if (scan.missing || scan.boxes.length === 0) {
+    say(scan.missing ? "This scan could not be found, so it cannot be exported." : "This scan has no boxes to export.");
+    return false;
+  }
+  return runExport([scan]);
+}
+
+async function runExport(items: ScanItem[]): Promise<boolean> {
   state.exporting = { active: true, done: 0, total: items.length };
   state.exportErrors = [];
   // What each scan looked like when the export started; edits during the export are not covered.
@@ -457,18 +513,14 @@ export async function exportApproved(): Promise<boolean> {
   try {
     const summary = await api.exportScans(
       items.map((s) => ({ path: s.path, boxes: s.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })) })),
-      {
-        format: state.settings.format,
-        jpegQuality: state.settings.jpegQuality,
-        pattern: state.settings.pattern,
-        keepMetadata: state.settings.keepMetadata,
-        tagSoftware: state.settings.tagSoftware,
-        outputDir: state.settings.outputDir,
-      },
+      exportOptions(),
       (event) => {
         if (event.event === "finished") {
           state.exporting.done++;
-          items[event.index].exportedKey = keys[event.index];
+          const scan = items[event.index];
+          scan.exportedKey = keys[event.index];
+          scan.exportedFiles = event.files;
+          scan.exportStats = { millis: event.millis, sizes: event.sizes };
         }
         if (event.event === "failed") {
           state.exporting.done++;
@@ -597,6 +649,7 @@ function restoreScan(saved: SavedScan & { status: RestoredStatus }, missing: boo
     revision: 0,
     history: new History<BoxItem[]>(),
     epoch: 0,
+    exportStats: null,
     missing,
   };
 }

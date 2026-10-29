@@ -5,6 +5,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
 import CloseDialog from "./components/CloseDialog.vue";
 import ProjectsDialog from "./components/ProjectsDialog.vue";
+import CropsView from "./components/CropsView.vue";
 import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
@@ -152,16 +153,21 @@ onBeforeUnmount(() => {
 
     <ScanQueue @new-project="openProjects('new')" />
 
-    <ReviewCanvas
-      :scan="selectedScan"
-      :keys-enabled="!showWelcome && !showClose && !showSettings && !showProjects"
-      @approve="approveAndAdvance"
-      @step="step"
-      @edit="selectedScan && updateBoxes(selectedScan, $event)"
-      @redetect="selectedScan && redetect(selectedScan)"
-      @undo="selectedScan && undo(selectedScan)"
-      @redo="selectedScan && redo(selectedScan)"
-    />
+    <div class="centre">
+      <ReviewCanvas
+        v-show="state.view === 'scan'"
+        class="fill"
+        :scan="selectedScan"
+        :keys-enabled="!showWelcome && !showClose && !showSettings && !showProjects && state.view === 'scan'"
+        @approve="approveAndAdvance"
+        @step="step"
+        @edit="selectedScan && updateBoxes(selectedScan, $event)"
+        @redetect="selectedScan && redetect(selectedScan)"
+        @undo="selectedScan && undo(selectedScan)"
+        @redo="selectedScan && redo(selectedScan)"
+      />
+      <CropsView v-if="state.view === 'crops'" />
+    </div>
 
     <SidePanel />
 
@@ -294,6 +300,15 @@ onBeforeUnmount(() => {
 }
 .app > :nth-child(3) {
   grid-area: review;
+}
+.centre {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.fill {
+  flex: 1;
 }
 .app > :nth-child(4) {
   grid-area: panel;

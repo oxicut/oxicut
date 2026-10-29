@@ -85,7 +85,7 @@ export interface ExportOptions {
 
 export type ExportEvent =
   | { event: "started"; index: number; total: number; name: string }
-  | { event: "finished"; index: number; files: string[] }
+  | { event: "finished"; index: number; files: string[]; sizes: number[]; millis: number }
   | { event: "failed"; index: number; name: string; error: string };
 
 export interface ExportSummary {
@@ -134,6 +134,31 @@ export const cancelDetection = () => invoke<void>("cancel_detection");
 export const detectOne = (path: string, settings: DetectSettings) =>
   invoke<ScanAnalysis>("detect_one", { path, settings });
 export const getThumbnail = (path: string) => invoke<string>("get_thumbnail", { path });
+/** One straightened crop for the Crops view: a small picture and the size the exported file will have. */
+export interface CropImage {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+/** One box cut for real, at full resolution with the export settings, into a scratch folder. */
+export interface FinalCrop {
+  path: string;
+  width: number;
+  height: number;
+  bytes: number;
+  format: "jpg" | "png" | "tif";
+  millis: number;
+  /** A picture the screen can show (a full-size JPEG copy when the file is a TIFF). */
+  dataUrl: string;
+  shownAsCopy: boolean;
+}
+
+export const finalCrop = (path: string, region: Box, number: number, options: ExportOptions) =>
+  invoke<FinalCrop>("final_crop", { path, region, number, options });
+
+export const getCrops = (path: string, scanWidth: number, boxes: Box[], side: number) =>
+  invoke<CropImage[]>("get_crops", { path, scanWidth, boxes, side });
 export const getPreview = (path: string) => invoke<string>("get_preview", { path });
 export const evaluateFlags = (boxes: IdBox[], width: number, height: number) =>
   invoke<Flag[]>("evaluate_flags", { boxes, width, height });
@@ -157,6 +182,8 @@ export interface ScanRecord {
   boxes: Box[];
   detectedKey: string;
   exportedKey: string | null;
+  /** The files the last export wrote for this scan. */
+  exportedFiles: string[];
   error: string | null;
 }
 

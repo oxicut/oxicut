@@ -12,6 +12,7 @@ const scan = {
   boxes: [{ cx: 10, cy: 20, w: 30, h: 40, angle: 5, id: 99 } as never],
   detectedKey: "k",
   exportedKey: null,
+  exportedFiles: ["D:/out/a-1.png"],
   error: null,
 };
 
@@ -26,6 +27,7 @@ test("a scan comes back from its record as it was", () => {
   assert.equal(back.status, "approved");
   assert.deepEqual(back.boxes, [{ cx: 10, cy: 20, w: 30, h: 40, angle: 5 }]);
   assert.equal(back.detectedKey, "k");
+  assert.deepEqual(back.exportedFiles, ["D:/out/a-1.png"]);
 });
 
 test("scans that were still waiting or running are detected again", () => {
@@ -43,6 +45,8 @@ test("an old or hand-edited record with fields missing still loads", () => {
   assert.deepEqual(back.boxes, []);
   assert.equal(back.exportedKey, null);
   assert.equal(back.error, null);
+  assert.deepEqual(back.exportedFiles, []);
+  assert.deepEqual(fromRecord({ id: 3, path: "x.png", exportedFiles: ["ok.png", 7 as never] }).exportedFiles, ["ok.png"]);
 });
 
 test("the save key changes with the boxes and the status but not with where in memory they live", () => {
