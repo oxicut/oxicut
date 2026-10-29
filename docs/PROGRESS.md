@@ -106,3 +106,38 @@ A project is one `.oxicut` file, JSON with a format version, kept in the OxiCut 
 - Tested: save and load round trip, atomic write, damaged, newer-format and byte-order-mark files, relative-path recovery, unique names, rename, start-up argument splitting, thumbnail cache rebuild; end to end by killing the app and reopening, and by launching a second copy with a project path.
 
 Next in Phase 5: front/back pairing, auto-pair, manifest.
+
+## Export speed, measured (2026-10-29)
+
+Test scans of A4 at 600 dpi (4960 x 7016 px) with four 2200 x 3200 px prints, slightly turned (1.5 degrees, so every crop goes through the rotating sampler): a 209 MB 16-bit TIFF, a 104 MB 8-bit TIFF, a 57 MB PNG and an 8 MB JPEG. `oxicut crop`, release build, all four crops, metadata carried over:
+
+| Scan | JPEG out | PNG out | TIFF out |
+|---|---:|---:|---:|
+| 8-bit JPEG | 1.06 s | 0.75 s | 0.60 s |
+| 8-bit PNG | 1.10 s | 0.81 s | 0.66 s |
+| 8-bit TIFF | 0.98 s | 0.70 s | 0.54 s |
+| 16-bit TIFF | 1.08 s | 1.12 s | 0.63 s |
+
+That is about 0.15 to 0.3 s per 7-megapixel crop plus a fraction of a second to open the scan: 1 crop takes 0.36 s and 16 crops of the same scan 4.6 s, so roughly 0.28 s per JPEG crop. A batch of 50 such scans (200 crops) exports in about a minute, a good deal faster than first guessed; reading the full-resolution scan is not the bottleneck. Output size matters more than time: four PNG crops are 42 MB, four 16-bit TIFF crops 161 MB.
+
+Not done, deliberately: encoding crops of one scan in parallel would take a scan from about 1.1 s to about 0.35 s on a many-core machine, but it is not needed yet and brings memory spikes with big 16-bit crops. Worth revisiting if exports of very large batches feel slow.
+
+This is also why the Crops view cuts its thumbnails from the cached preview instead of exporting to a scratch folder: a preview crop takes milliseconds, a real export about a quarter of a second per crop and many megabytes.
+
+## Phase 5: the Crops view and the export list (2026-10-29)
+
+ScanSplitter lists every cropped photo in the app before it is saved (its Results gallery); OxiCut showed only boxes on the scan, so the straightened result was never seen until it was on disk. The new **Crops** tab next to the scan view fills that gap.
+
+- One card per box: the straightened crop, the file name the export will give it (the same naming rules as the exporter, mirrored in `cropNames.ts` and tested against its cases), its size in pixels, an Exported mark once written, and Turn left, Turn right, Remove. Clicking opens a larger view with arrow keys. "This scan" or "All scans"; "Export this scan" writes just the open scan.
+- The pictures are cut from the cached screen preview by the same `crop_region` the export uses (`engine::render_crops`), so they show what will be written, in milliseconds, without exporting anything. A pre-export to a scratch folder was considered and rejected: see the export timings above, about a quarter of a second and many megabytes per crop.
+- **Turning a crop is turning its box**: angle minus 90 and width and height swapped for a clockwise turn, plus 90 for counter-clockwise. The box on the scan looks the same, the exported picture is turned, and undo, redo, autosave and flags need nothing new. The sign convention is pinned by a test that follows a red marker through the crop.
+- **The Export tab lists what was written**, scan by scan, with file names, sizes and the time it took; the written file names are saved in the project (`exportedFiles`), the sizes and times are for the session. Scans edited since their export are marked.
+- Checked by hand on the six samples: crops upright, an upside-down print fixed with two clicks (the file came out 152 x 231, portrait), Export this scan wrote four files, the project file held their names after the autosave.
+
+## Phase 5: "Show final result" in the larger view (2026-10-29)
+
+The quick look in the Crops view comes from the screen preview. For checking the real thing, the larger view of a crop has a **Show final result** button (on its own line above Previous and Next): it cuts that one box from the full-resolution scan with the export code and the current export settings, writes the file into a scratch folder (`final-crops` in the cache folder, replaced when cut again, files older than a day removed), and shows it, with its size in pixels and bytes, format and how long it took, a Preview | Final result switch, a click-for-100% view, and Show file. A TIFF cannot be displayed by the window, so it is shown through a full-size JPEG copy and the window says so.
+
+This is the one-crop, on-demand version of the "export candidates to a scratch folder" idea: about a quarter of a second for one crop (see the export timings), instead of exporting everything up front.
+
+`export_regions` now goes through a small `ScanExport` helper (`oxicut-core::export`), which the real cut uses too, so the two cannot drift apart: a test checks the scratch file is byte for byte the file the export writes for the same box.

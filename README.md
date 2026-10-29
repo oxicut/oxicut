@@ -35,6 +35,7 @@ How closely the port follows the original, and every place it deviates, is writt
 **A review workflow built for batches.**
 - Add files, a folder, or drop them on the window; scans are detected as they arrive.
 - Scans with nothing suspicious are approved automatically; the ones flagged (nothing found, touches the scan edge, unusual shape, overlapping boxes) wait for you. `Enter` approves and moves to the next.
+- A **Crops** tab shows the straightened pictures an export will write before anything is saved (with the file names they will get), lets you turn a sideways or upside-down print a quarter turn with one click, and the Export tab lists what each export wrote.
 - Rotatable, resizable boxes on a Fabric.js canvas, with add, split, delete and straighten tools, undo and redo per scan, and Shift to snap rotation to 90 degrees.
 - **Loupes.** A round 4x magnifier follows any resize handle you drag, and while you move or rotate a box, all four of its corners are magnified at once (one loupe in each corner of the view) so you can line up whichever corner you care about.
 - The scan list and the settings panel fold into slim rails that still show what matters: how many scans are approved and how many need review, a thumbnail per scan with its status, the detector and the export format.
