@@ -35,7 +35,20 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # Keep the compiled crates, even from a run that failed later on, so the next run starts warm.
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Downloads made while building: the installer tools (NSIS, WebView2 helper) and ONNX Runtime.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/tauri
+            ~/AppData/Local/ort.pyke.io
+            ~/AppData/Roaming/ort.pyke.io
+          key: downloads-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: downloads-${{ runner.os }}-
 
       - uses: actions/setup-node@v4
         with:
