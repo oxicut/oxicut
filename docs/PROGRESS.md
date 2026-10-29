@@ -147,3 +147,9 @@ This is the one-crop, on-demand version of the "export candidates to a scratch f
 The larger view of a crop can now adjust the crop without leaving it: **Cut closer** and **Cut wider** move every edge of the box in or out by 1% of the crop's shorter side (at least one pixel; 22 px for a 2200 x 3200 crop, 3 px for a small one). The box keeps its centre and angle, so the rotated marquee on the scan changes too, each click is one undo step (an **Undo** button sits beside them), and the picture refreshes; if the final result was showing it is prepared again. Closer stops before a side gets under 16 px, wider stops where the box would reach past the edge of the scan. The rules are in `cropSize.ts` and tested (`cropSize.test.ts`).
 
 The same two actions are in the box tools beside the scan, as **Closer** and **Wider**, for the selected box (greyed out when no box is selected or at the limits). They go through the same store action as the larger view, so the step, the limits and the undo behaviour are identical.
+
+## About window (2026-10-30)
+
+The version at the bottom right of the window is now a button that opens an About window: the OxiCut name in the logo colours, the version, one plain sentence about what the app does, a button that opens the project page in the browser (with the address written under it), and the line "Free software under the GPL-3.0. Based on ScanSplitter by Madnex."
+
+The address has one source: `repository` and `homepage` in the workspace `Cargo.toml` (`https://github.com/oxicut/oxicut`, which is also what crates.io and the installers read), read by `oxicut_core::REPOSITORY` and handed to the window by the `app_repository` command. The repository name `oxicut/oxicut` was chosen to match the organisation, the crate names and the product; the repository itself still has to be created and pushed (Phase 7).

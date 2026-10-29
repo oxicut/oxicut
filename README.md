@@ -97,6 +97,10 @@ cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 
 `cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests.
 
+## Project page
+
+https://github.com/oxicut/oxicut (the address the app itself links to from its About window).
+
 ## Credits and license
 
 The detection pipeline, its benchmark methodology and the choice of MobileSAM are ScanSplitter's, by Madnex. MobileSAM weights are from [Acly/MobileSAM](https://huggingface.co/Acly/MobileSAM).

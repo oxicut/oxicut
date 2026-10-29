@@ -153,6 +153,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 Plan, research and sources: [`docs/distribution-plan.md`](docs/distribution-plan.md). The audience is non-technical and mostly older, so the Microsoft Store (free to publish to, MSIX needs no certificate) is the main route, a website with a direct installer the second.
 
+- [ ] Create the GitHub repository `oxicut/oxicut` (the About window and `Cargo.toml` already point there), add it as the remote and push; later a repository `oxicut.github.io` for the website, and claim the `oxicut` names on crates.io.
 - [ ] One version source: the workspace version in `Cargo.toml`; `oxicut_core::VERSION`, `tauri.conf.json` and `app/package.json` follow it.
 - [ ] Installer settings (publisher, NSIS per-user install, WebView2) in `tauri.conf.json`.
 - [ ] `.oxicut` file association: `bundle.fileAssociations` is already set, so the NSIS installer registers it; the MSIX package needs the matching file type association in its manifest. Check double-click, the file icon and "open while the app is running" on a clean machine once an installer exists (until then `tools/register-file-association.ps1` does it per user for a built copy).
