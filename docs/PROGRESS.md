@@ -153,3 +153,9 @@ The same two actions are in the box tools beside the scan, as **Closer** and **W
 The version at the bottom right of the window is now a button that opens an About window: the OxiCut name in the logo colours, the version, one plain sentence about what the app does, a button that opens the project page in the browser (with the address written under it), and the line "Free software under the GPL-3.0. Based on ScanSplitter by Madnex."
 
 The address has one source: `repository` and `homepage` in the workspace `Cargo.toml` (`https://github.com/oxicut/oxicut`, which is also what crates.io and the installers read), read by `oxicut_core::REPOSITORY` and handed to the window by the `app_repository` command. The repository name `oxicut/oxicut` was chosen to match the organisation, the crate names and the product; the repository itself still has to be created and pushed (Phase 7).
+
+## Release workflow (2026-10-30)
+
+The repository `oxicut/oxicut` is the remote. The version has one source, the workspace `Cargo.toml` (0.0.1): `oxicut_core::VERSION` reads it, `tauri.conf.json` no longer sets its own, and `app/package.json` matches. The installer is an NSIS per-user setup (no administrator prompt) with the publisher and description set.
+
+`.github/workflows/release.yml` is started by hand. It runs the Rust and web tests, builds the installer, and replaces the GitHub release `v<version>` (deleting the old release and tag first) with `OxiCut-setup.exe`, the versioned installer and `SHA256SUMS.txt`, marked as a test version unless unticked. This is the loop for redoing 0.0.1 until it is right.

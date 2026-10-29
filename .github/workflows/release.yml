@@ -1,0 +1,89 @@
+name: Release
+
+# Started by hand from the Actions tab. The release is named after the version in Cargo.toml.
+# Running it again for the same version replaces that release, so a release can be redone until it is right.
+on:
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Mark the release as a test version"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version
+        id: version
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building version $version"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Test the engine
+        run: cargo test --workspace
+
+      - name: Install the web part
+        working-directory: app
+        run: npm ci
+
+      - name: Test the web part
+        working-directory: app
+        run: npm test
+
+      - name: Build the installer
+        working-directory: app
+        run: npx tauri build --bundles nsis
+
+      - name: Collect the files
+        id: files
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          mkdir release
+          installer=$(ls target/release/bundle/nsis/*-setup.exe | head -n1)
+          cp "$installer" "release/$(basename "$installer")"
+          cp "$installer" release/OxiCut-setup.exe
+          (cd release && sha256sum *.exe > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Replace the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          gh release delete "$tag" --cleanup-tag --yes || true
+          flag=""
+          if [ "$PRERELEASE" = "true" ]; then flag="--prerelease"; fi
+          cat > notes.md <<'EOF'
+          OxiCut cuts scanned photos and postcards apart into separate, straightened pictures.
+
+          **To install:** download `OxiCut-setup.exe` below and open it.
+
+          This is a test version and the installer is not signed yet, so Windows may show a blue
+          "Windows protected your PC" window. Choose "More info", then "Run anyway". Your scans are
+          never changed.
+          EOF
+          gh release create "$tag" release/* --target "$GITHUB_SHA" --title "OxiCut ${tag#v}" --notes-file notes.md $flag

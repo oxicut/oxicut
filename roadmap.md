@@ -153,11 +153,11 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 Plan, research and sources: [`docs/distribution-plan.md`](docs/distribution-plan.md). The audience is non-technical and mostly older, so the Microsoft Store (free to publish to, MSIX needs no certificate) is the main route, a website with a direct installer the second.
 
-- [ ] Create the GitHub repository `oxicut/oxicut` (the About window and `Cargo.toml` already point there), add it as the remote and push; later a repository `oxicut.github.io` for the website, and claim the `oxicut` names on crates.io.
-- [ ] One version source: the workspace version in `Cargo.toml`; `oxicut_core::VERSION`, `tauri.conf.json` and `app/package.json` follow it.
-- [ ] Installer settings (publisher, NSIS per-user install, WebView2) in `tauri.conf.json`.
+- [x] Create the GitHub repository `oxicut/oxicut` (the About window and `Cargo.toml` already point there), add it as the remote and push; later a repository `oxicut.github.io` for the website, and claim the `oxicut` names on crates.io.
+- [x] One version source: the workspace version in `Cargo.toml`; `oxicut_core::VERSION`, `tauri.conf.json` and `app/package.json` follow it.
+- [x] Installer settings (publisher, NSIS per-user install, WebView2) in `tauri.conf.json`.
 - [ ] `.oxicut` file association: `bundle.fileAssociations` is already set, so the NSIS installer registers it; the MSIX package needs the matching file type association in its manifest. Check double-click, the file icon and "open while the app is running" on a clean machine once an installer exists (until then `tools/register-file-association.ps1` does it per user for a built copy).
-- [ ] Release workflow: a manual patch/minor/major bump, tests, build, and a GitHub Release with the installer under a stable name, the command-line zip and checksums.
+- [x] Release workflow (`.github/workflows/release.yml`, run by hand from the Actions tab): tests, build, and a GitHub Release `v<version>` with the installer under the stable name `OxiCut-setup.exe` plus checksums, replacing the release if the version already has one. _(Still to add: an automatic version bump and the command-line zip.)_
 - [ ] MSIX packaging job for the Microsoft Store (after the name is reserved in Partner Center).
 - [ ] Website on GitHub Pages: download buttons, three-step guide, FAQ, privacy page, support contact.
 - [ ] Code signing for the direct installer (SignPath Foundation, if eligible).

@@ -2826,7 +2826,7 @@ dependencies = [
 
 [[package]]
 name = "oxicut-app"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "base64 0.23.1",
  "directories",
@@ -2845,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "oxicut-cli"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2858,7 +2858,7 @@ dependencies = [
 
 [[package]]
 name = "oxicut-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "image",
  "img-parts",
@@ -2872,7 +2872,7 @@ dependencies = [
 
 [[package]]
 name = "oxicut-models"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "directories",
  "reqwest",

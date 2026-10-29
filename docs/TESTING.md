@@ -44,6 +44,10 @@ Things worth checking in particular:
 - Prints touching each other, or touching the edge of the bed.
 - A big batch (dozens of scans): does the window stay responsive?
 
+## Making a release
+
+Change `version` in the root `Cargo.toml` (it feeds the app, the installer and the command line), push, then on GitHub open Actions, choose *Release* and *Run workflow*. It runs the tests, builds the installer and publishes a release named `v<version>` with `OxiCut-setup.exe`. Running it again for the same version replaces that release. Install the result on a clean machine and check: it starts, the About window shows the version, and double-clicking a `.oxicut` file opens it.
+
 ## Known gaps
 
 - v7-lite is only part of ScanSplitter's v7 (no models): it finds the same number of prints as v3. The full v7 is much better at counting them, but a whole album page can still come out as one box, as in ScanSplitter.

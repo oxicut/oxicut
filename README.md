@@ -97,6 +97,10 @@ cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 
 `cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests.
 
+## Download
+
+The installer is on the [Releases page](https://github.com/oxicut/oxicut/releases). It is a test version and is not signed yet, so Windows may ask you to choose "More info" and "Run anyway".
+
 ## Project page
 
 https://github.com/oxicut/oxicut (the address the app itself links to from its About window).

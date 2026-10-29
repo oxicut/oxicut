@@ -3,8 +3,8 @@
 //! Detection is a port of ScanSplitter (GPL-3.0). See `docs/detector-v7-port.md`.
 
 /// The OxiCut version shown in the app and the CLI and written into the `Software` field of
-/// exported images. Hardcoded for now; it will come from the build later.
-pub const VERSION: &str = "0.0.1";
+/// exported images. It is the workspace version in the root `Cargo.toml`, which the installer uses too.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Where the project lives on the web (the one address, set in the workspace `Cargo.toml`).
 pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
