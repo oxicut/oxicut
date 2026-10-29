@@ -89,3 +89,20 @@ Most of Phase 3 came with the manual-testing milestone. What was left, and is no
 - Download errors now include the cause, and the Detection tab warns when v7 is selected but its models are missing.
 
 Left for you to check by hand: that the exported files open in Windows Photos and IrfanView.
+
+## Phase 4: review mode (closed out 2026-10-28)
+
+The review editor was built across the hand-testing rounds, so the checklist had fallen behind. Everything on it exists and is used daily: the per-scan Fabric.js canvas with rotatable, resizable boxes; add, delete, split, straighten and re-detect; zoom and pan; Shift snaps rotation to 90 degrees; Enter approves and moves on, the arrows step through the list, Delete removes a box; the five warnings (nothing found, touches the scan edge, unusual shape, much smaller than the rest, overlapping) and auto-approve of unflagged scans. Added beyond the list: loupes (one at a dragged handle, four while moving or rotating), per-scan undo and redo, collapsible scan list and panel with live status, a settings dialog with a light, dark or follow-system theme, and a neutral palette.
+
+## Phase 5, step 1: projects that save themselves (2026-10-28)
+
+A project is one `.oxicut` file, JSON with a format version, kept in the OxiCut folder in Documents (or anywhere: any `.oxicut` opens). It holds the scan list with boxes, statuses, the keys that tell edited from untouched and exported from not, and each scan's path both absolute and relative to the project file, so a project folder copied to another PC finds its scans. It holds no pixels: previews and thumbnails are rebuilt from the scans and cached, so the file stays small.
+
+- **Autosave** one second after any change (a temporary file renamed over the old one, so a crash never leaves half a project) and flushed on closing. The creation time survives saves.
+- **Reopening** restores everything; scans that were still being detected are detected again; scans whose file is gone are kept with their boxes, shown as "file not found", and skipped by export. The last project opens on start; a first run makes "My scans".
+- **Projects dialog** from the project name in the top bar: open, new, rename, show in folder, remove from the list, open a file; a recent list with scan and approved counts. Switching waits while detection or export runs.
+- **Single instance**: starting OxiCut again (double-clicking another project) hands the file to the window that is already open instead of starting a second copy. The file association itself is set in `tauri.conf.json` and applied by the installer (Phase 7); `tools/register-file-association.ps1` does it per user for a built copy.
+- **Closing guard**: since work is saved, closing only asks while an export is running.
+- Tested: save and load round trip, atomic write, damaged, newer-format and byte-order-mark files, relative-path recovery, unique names, rename, start-up argument splitting, thumbnail cache rebuild; end to end by killing the app and reopening, and by launching a second copy with a project path.
+
+Next in Phase 5: front/back pairing, auto-pair, manifest.

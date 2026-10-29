@@ -39,14 +39,14 @@ How closely the port follows the original, and every place it deviates, is writt
 - **Loupes.** A round 4x magnifier follows any resize handle you drag, and while you move or rotate a box, all four of its corners are magnified at once (one loupe in each corner of the view) so you can line up whichever corner you care about.
 - The scan list and the settings panel fold into slim rails that still show what matters: how many scans are approved and how many need review, a thumbnail per scan with its status, the detector and the export format.
 - A Settings dialog (gear icon, or `Ctrl+,`) lets you follow Windows, or always use a light or dark look.
-- Closing the window asks first if it would lose work: scans never exported, edited after export, edited without approval, or an export in progress.
+- Projects save themselves: your scans, boxes and approvals are kept in a `.oxicut` file (a small JSON file in the OxiCut folder in Documents) and the app reopens where you left off. You can keep several projects, rename them, copy a project file to another computer, and open one by double-clicking it. Closing the window only asks while an export is running.
 - Your originals are never modified, and existing files are never overwritten (a new file gets ` (2)` in its name).
 
 ## What ScanSplitter has that OxiCut does not (yet)
 
 - PDF input.
 - Automatic 90/180/270 degree orientation (planned; the orientation model is already in the registry).
-- Persistent projects, archival metadata (dates, places, captions), lossless masters and manifests. OxiCut keeps nothing between sessions yet; projects and front/back pairing for postcards are Phase 5 of the roadmap.
+- Archival metadata (dates, places, captions), lossless masters and manifests. OxiCut does keep projects now (see above), but front/back pairing for postcards and a manifest are still to come (Phase 5 of the roadmap).
 - Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
 - macOS and Linux (nothing in the stack ties OxiCut to Windows, but it is only built and tested there).
 

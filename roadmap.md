@@ -117,21 +117,21 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 ## Phase 4: Review mode (marquee editor)
 
-- [ ] Per-scan Vue view: scan on a Fabric.js canvas, one rotatable/resizable rect per box.
-- [ ] Tools: add box, delete box, split box in half, re-detect, snap angle to 0° with a modifier key, zoom/pan.
+- [x] Per-scan Vue view: scan on a Fabric.js canvas, one rotatable/resizable rect per box.
+- [x] Tools: add box, delete box, split box in half, straighten, re-detect, snap rotation to 90° with Shift, zoom/pan.
 - [x] Loupe: while a resize handle is dragged, a round magnifier (4x the current zoom, drawn from the preview) shows the area around it with the box outline and a crosshair, placed away from the pointer. While a box is moved or rotated, four smaller loupes show all four of its corners at once, each in the stage corner that matches where the box corner is on screen.
 - [x] Undo / redo per scan (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, toolbar buttons): every box edit is one step, Re-detect is undoable, history lives while the scan is in the list.
-- [x] Closing guard: closing the window warns about approved-but-unexported scans, edits after export, edits that were not approved, and a running export (`closeGuard.ts`, `CloseDialog.vue`); unsaved settings are flushed on close. Revisit when Phase 5 persists projects.
+- [x] Closing guard: closing the window warns while an export is running (`closeGuard.ts`, `CloseDialog.vue`); unsaved settings and the project are flushed on close. Since projects save themselves it no longer warns about unexported or unapproved work.
 - [x] Collapsible scan list and side panel (Ctrl+B, Ctrl+Shift+B): slim rails keep the approved count, the to-review count, per-scan status thumbnails, the detector, the export format and a missing-models warning in view; the layout is remembered and a zoomed-in view survives a collapse.
-- [x] General settings dialog (gear in the top bar, Ctrl+,) with a theme picker: Follow system, Light or Dark; remembered, and it also sets the window title bar.
-- [ ] Keyboard: Enter = approve & advance, arrows = move through queue, Delete = remove box.
-- [ ] Flags (warnings): no item found, box touches scan edge, unusual aspect ratio/size, overlapping boxes. Auto-approve unflagged scans.
-- [ ] **Done when:** a scan can be fully corrected by mouse + keyboard without touching settings.
-- [ ] Commit + `docs/PROGRESS.md` entry.
+- [x] General settings dialog (gear in the status bar, Ctrl+,) with a theme picker: Follow system, Light or Dark; remembered, and it also sets the window title bar.
+- [x] Keyboard: Enter = approve & advance, arrows = move through queue, Delete = remove box.
+- [x] Flags (warnings): no item found, box touches scan edge, unusual aspect ratio/size, overlapping boxes. Auto-approve unflagged scans.
+- [x] **Done when:** a scan can be fully corrected by mouse + keyboard without touching settings. _(Used that way throughout the hand testing; see `docs/TESTING.md`.)_
+- [x] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 5: Projects, pairing, export
 
-- [ ] Project persistence in the app data dir (JSON, or SQLite via `rusqlite`): scans, boxes, approval state, per-crop filename/caption.
+- [x] Project persistence: a project is one `.oxicut` file (JSON) in `Documents\OxiCut` holding the scan list, boxes, approvals and export marks, saved a second after every change. The app reopens the last project on start, with a "Create new project" button under the scan list and a Projects dialog to switch, rename and open files, and moved projects find their scans through relative paths. Double-clicking a project opens it in the running window (single instance); the Windows association comes with the installer, see Phase 7. _(Per-crop filename and caption are not stored yet; they come with pairing.)_
 - [ ] **Front/back pairing**: link a crop on one scan to a crop on another; export as `{name}-front` / `{name}-back`.
 - [ ] "Auto-pair" helper: match by order across consecutive scans, user confirms.
 - [ ] Export approved crops only, format per settings, optional JSON/CSV manifest.
@@ -145,6 +145,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [ ] macOS/Linux builds.
 - [ ] Album Splitter mode.
 - [ ] **Statistics** (builds on the Phase 5 projects: a summary of what a project or session did, kept in the project and shown in the app; also useful in the manifest and for judging the detectors on real scans). Counts to cover: scans added, processed, failed and skipped; items detected in total and per scan; how many boxes were left as detected, edited (moved, resized, rotated, straightened), added by hand, deleted or split; scans auto-approved against approved by hand, and scans that needed review (and for which flag); items exported against not exported, with output format and size; which detector ran (v3, v7-lite or v7) and which model files (name and checksum) when v7 was used; how many scans were re-detected; time spent detecting. Local only, never sent anywhere.
+- [ ] **Alternative suggestions** for a scan: v7 already builds several candidate sets for each scan (the v5 and MobileSAM anchors, v3, v3 with a colour cap, the chroma proposals) and keeps the best by score, so the runners-up are thrown away. Keep them and let the user cycle through them ("Try another suggestion", with a small preview and a score or a plain reason such as "found 5 prints, one more than the current") when the chosen one looks wrong, instead of fixing every box by hand. Check first whether MobileSAM's decoder can also return several masks per prompt (the model in use is the single-mask export, so that would need the multi-mask one), and record which suggestion was used in the statistics.
 
 ## Phase 7: Distribution
 
@@ -152,6 +153,7 @@ Plan, research and sources: [`docs/distribution-plan.md`](docs/distribution-plan
 
 - [ ] One version source: the workspace version in `Cargo.toml`; `oxicut_core::VERSION`, `tauri.conf.json` and `app/package.json` follow it.
 - [ ] Installer settings (publisher, NSIS per-user install, WebView2) in `tauri.conf.json`.
+- [ ] `.oxicut` file association: `bundle.fileAssociations` is already set, so the NSIS installer registers it; the MSIX package needs the matching file type association in its manifest. Check double-click, the file icon and "open while the app is running" on a clean machine once an installer exists (until then `tools/register-file-association.ps1` does it per user for a built copy).
 - [ ] Release workflow: a manual patch/minor/major bump, tests, build, and a GitHub Release with the installer under a stable name, the command-line zip and checksums.
 - [ ] MSIX packaging job for the Microsoft Store (after the name is reserved in Partner Center).
 - [ ] Website on GitHub Pages: download buttons, three-step guide, FAQ, privacy page, support contact.
