@@ -178,7 +178,7 @@ fn file_name(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn jpeg_data_url(image: &RgbImage, quality: u8) -> Result<String, String> {
+fn jpeg_bytes(image: &RgbImage, quality: u8) -> Result<Vec<u8>, String> {
     let mut bytes = Vec::new();
     JpegEncoder::new_with_quality(&mut Cursor::new(&mut bytes), quality)
         .encode(
@@ -188,7 +188,11 @@ fn jpeg_data_url(image: &RgbImage, quality: u8) -> Result<String, String> {
             image::ExtendedColorType::Rgb8,
         )
         .map_err(|e| format!("could not encode a preview: {e}"))?;
-    Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
+    Ok(bytes)
+}
+
+fn data_url(jpeg: &[u8]) -> String {
+    format!("data:image/jpeg;base64,{}", STANDARD.encode(jpeg))
 }
 
 /// Shrink to fit `side` on the long side (never enlarges).
@@ -217,6 +221,28 @@ pub fn preview_path(cache_dir: &Path, scan: &Path) -> PathBuf {
         }
     }
     cache_dir.join(format!("{:016x}.jpg", hasher.finish()))
+}
+
+/// Where the queue thumbnail of `scan` is cached: beside the previews, same key, in `thumbs`.
+pub fn thumbnail_path(cache_dir: &Path, scan: &Path) -> PathBuf {
+    let key = preview_path(cache_dir, scan);
+    cache_dir.join("thumbs").join(key.file_name().unwrap_or_default())
+}
+
+/// The queue thumbnail of `rgb` as a data URL; also leaves it in the cache (best effort) so a
+/// reopened project does not have to rebuild it.
+fn make_thumbnail(rgb: &RgbImage, cache_dir: &Path, scan: &Path) -> Result<String, String> {
+    let bytes = jpeg_bytes(&fit(rgb, THUMBNAIL_SIDE), 80)?;
+    let target = thumbnail_path(cache_dir, scan);
+    if let Some(folder) = target.parent()
+        && std::fs::create_dir_all(folder).is_ok()
+    {
+        let part = target.with_extension("part");
+        if std::fs::write(&part, &bytes).is_ok() {
+            let _ = std::fs::rename(&part, &target);
+        }
+    }
+    Ok(data_url(&bytes))
 }
 
 fn write_preview(rgb: &RgbImage, cache_dir: &Path, scan: &Path) -> Result<(), String> {
@@ -286,7 +312,7 @@ pub fn analyze_scan(
         })
         .collect();
     write_preview(&rgb, cache_dir, path)?;
-    let thumbnail = jpeg_data_url(&fit(&rgb, THUMBNAIL_SIDE), 80)?;
+    let thumbnail = make_thumbnail(&rgb, cache_dir, path)?;
     Ok(ScanAnalysis {
         path: path.to_string_lossy().into_owned(),
         name,
@@ -298,6 +324,24 @@ pub fn analyze_scan(
     })
 }
 
+/// The queue thumbnail as a data URL: from the cache when it is there, else rebuilt from the cached
+/// preview (made first if that is gone too). Used when a saved project is opened.
+pub fn load_thumbnail(path: &Path, cache_dir: &Path) -> Result<String, String> {
+    if let Ok(bytes) = std::fs::read(thumbnail_path(cache_dir, path)) {
+        return Ok(data_url(&bytes));
+    }
+    let preview = preview_path(cache_dir, path);
+    if !preview.is_file() {
+        let name = file_name(path);
+        let image = load_image(path).map_err(|e| format!("Could not read {name}: {e}"))?;
+        write_preview(&to_detection_rgb(&image), cache_dir, path)?;
+    }
+    let rgb = image::open(&preview)
+        .map_err(|e| format!("could not read the preview: {e}"))?
+        .to_rgb8();
+    make_thumbnail(&rgb, cache_dir, path)
+}
+
 /// The screen preview as a data URL, from the cache when it is there.
 pub fn load_preview(path: &Path, cache_dir: &Path) -> Result<String, String> {
     let cached = preview_path(cache_dir, path);
@@ -307,7 +351,7 @@ pub fn load_preview(path: &Path, cache_dir: &Path) -> Result<String, String> {
         write_preview(&to_detection_rgb(&image), cache_dir, path)?;
     }
     let bytes = std::fs::read(&cached).map_err(|e| format!("could not read the preview: {e}"))?;
-    Ok(format!("data:image/jpeg;base64,{}", STANDARD.encode(bytes)))
+    Ok(data_url(&bytes))
 }
 
 #[cfg(test)]
@@ -424,6 +468,27 @@ mod tests {
             .unwrap();
         let thumb = image::load_from_memory(&bytes).unwrap();
         assert!(thumb.width().max(thumb.height()) <= THUMBNAIL_SIDE);
+    }
+
+    #[test]
+    fn thumbnails_survive_in_the_cache_and_are_rebuilt_when_it_is_cleared() {
+        let dir = scratch("thumbs");
+        let scan = dir.join("scan.png");
+        write_scan(&scan);
+        let cache = dir.join("cache");
+        let analysis = analyze_scan(&scan, &DetectSettings::default(), &cache).unwrap();
+
+        // Analysis leaves the thumbnail beside the preview, and reopening reads it back unchanged.
+        assert!(thumbnail_path(&cache, &scan).is_file());
+        assert_eq!(load_thumbnail(&scan, &cache).unwrap(), analysis.thumbnail);
+
+        // Without the thumbnail it is rebuilt from the preview; without both, from the scan.
+        std::fs::remove_file(thumbnail_path(&cache, &scan)).unwrap();
+        assert!(load_thumbnail(&scan, &cache).unwrap().starts_with("data:image/jpeg;base64,"));
+        assert!(thumbnail_path(&cache, &scan).is_file());
+        std::fs::remove_dir_all(&cache).unwrap();
+        assert!(load_thumbnail(&scan, &cache).unwrap().starts_with("data:image/jpeg;base64,"));
+        assert!(preview_path(&cache, &scan).is_file());
     }
 
     #[test]

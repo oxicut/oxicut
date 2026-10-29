@@ -46,8 +46,19 @@ export interface DetectSettings {
   insetPx: number;
 }
 
+/** A project used lately, with what the Projects list shows (kept up to date as it is saved). */
+export interface RecentProject {
+  path: string;
+  scans: number;
+  approved: number;
+  /** Seconds since 1970. */
+  updated: number;
+}
+
 export interface AppSettings extends DetectSettings {
   theme: ThemeChoice;
+  lastProject: string | null;
+  recentProjects: RecentProject[];
   format: "same" | "jpg" | "png" | "tiff";
   jpegQuality: number;
   pattern: string;
@@ -108,7 +119,13 @@ function channel<T>(onEvent: (event: T) => void): Channel<T> {
 
 export const SCAN_EXTENSIONS = ["jpg", "jpeg", "png", "tif", "tiff"];
 
-export const startupPaths = () => invoke<string[]>("startup_paths");
+export interface StartupArgs {
+  project: string | null;
+  scans: string[];
+}
+
+/** A project to open and scans to add, from the command line or a second launch. */
+export const startupArgs = () => invoke<StartupArgs>("startup_args");
 export const expandPaths = (paths: string[]) => invoke<string[]>("expand_paths", { paths });
 
 export const detectScans = (paths: string[], settings: DetectSettings, onEvent: (e: DetectEvent) => void) =>
@@ -116,6 +133,7 @@ export const detectScans = (paths: string[], settings: DetectSettings, onEvent: 
 export const cancelDetection = () => invoke<void>("cancel_detection");
 export const detectOne = (path: string, settings: DetectSettings) =>
   invoke<ScanAnalysis>("detect_one", { path, settings });
+export const getThumbnail = (path: string) => invoke<string>("get_thumbnail", { path });
 export const getPreview = (path: string) => invoke<string>("get_preview", { path });
 export const evaluateFlags = (boxes: IdBox[], width: number, height: number) =>
   invoke<Flag[]>("evaluate_flags", { boxes, width, height });
@@ -125,6 +143,45 @@ export const exportScans = (
   options: ExportOptions,
   onEvent: (e: ExportEvent) => void,
 ) => invoke<ExportSummary>("export_scans", { items, options, onEvent: channel(onEvent) });
+
+// ---- projects: one `.oxicut` file per batch of scans
+
+export interface ScanRecord {
+  id: number;
+  path: string;
+  relPath?: string | null;
+  name: string;
+  width: number;
+  height: number;
+  status: string;
+  boxes: Box[];
+  detectedKey: string;
+  exportedKey: string | null;
+  error: string | null;
+}
+
+export interface ProjectFile {
+  formatVersion: number;
+  appVersion: string;
+  created: number;
+  updated: number;
+  scans: ScanRecord[];
+}
+
+export interface OpenedProject {
+  path: string;
+  name: string;
+  project: ProjectFile;
+  /** Ids of scans whose file could not be found. */
+  missing: number[];
+}
+
+export const projectsDir = () => invoke<string>("projects_dir");
+export const projectNew = (name: string) => invoke<string>("project_new", { name });
+export const projectOpen = (path: string) => invoke<OpenedProject>("project_open", { path });
+export const projectSave = (path: string, project: ProjectFile) => invoke<void>("project_save", { path, project });
+export const projectRename = (path: string, name: string) => invoke<string>("project_rename", { path, name });
+export const filesExist = (paths: string[]) => invoke<boolean[]>("files_exist", { paths });
 
 export const loadSettings = () => invoke<AppSettings>("load_settings");
 export const saveSettings = (settings: AppSettings) => invoke<void>("save_settings", { settings });
@@ -142,6 +199,12 @@ export async function pickScans(): Promise<string[]> {
     filters: [{ name: "Scans", extensions: SCAN_EXTENSIONS }],
   });
   return picked === null ? [] : Array.isArray(picked) ? picked : [picked];
+}
+
+/** Native file picker for a project file; `null` when cancelled. */
+export async function pickProject(): Promise<string | null> {
+  const picked = await open({ multiple: false, filters: [{ name: "OxiCut project", extensions: ["oxicut"] }] });
+  return typeof picked === "string" ? picked : null;
 }
 
 /** Native folder picker; `null` when cancelled. */

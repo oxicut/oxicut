@@ -14,6 +14,8 @@ import {
 } from "../store";
 import { layout, toggleQueue } from "../layout";
 
+const emit = defineEmits<{ newProject: [] }>();
+
 type Filter = "all" | "review" | "approved";
 const filter = ref<Filter>("all");
 const filters: { id: Filter; label: string }[] = [
@@ -36,12 +38,18 @@ function flagText(scan: ScanItem): string {
 }
 
 const chipClass = (scan: ScanItem) => ({
-  ok: scan.status === "approved",
-  warn: scan.status === "flagged" || scan.status === "error",
+  ok: scan.status === "approved" && !scan.missing,
+  warn: scan.status === "flagged" || scan.status === "error" || scan.missing,
 });
 
 const statusLabel = (scan: ScanItem) =>
-  scan.status === "queued" ? "waiting" : scan.status === "detecting" ? "detecting…" : scan.status;
+  scan.missing
+    ? "file not found"
+    : scan.status === "queued"
+      ? "waiting"
+      : scan.status === "detecting"
+        ? "detecting…"
+        : scan.status;
 
 /** Scans the "To review" filter would show: what still needs the user's attention. */
 const toReview = computed(
@@ -66,11 +74,15 @@ const railTip = (scan: ScanItem) =>
         <button class="item" :class="{ active: scan.id === state.selectedId }" :title="railTip(scan)" :aria-label="railTip(scan)" @click="selectScan(scan.id)">
           <span class="thumb" :data-status="scan.status" aria-hidden="true">
             <img v-if="scan.thumbnail" :src="scan.thumbnail" alt="" />
+            <span v-else-if="scan.missing" class="gone">?</span>
             <span v-else class="spinner"></span>
           </span>
         </button>
       </li>
     </ul>
+    <button class="btn ghost" title="Create a new project" aria-label="Create a new project" @click="emit('newProject')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6zM14 3v4h4M12 11v6M9 14h6" /></svg>
+    </button>
   </aside>
 
   <aside v-else class="queue">
@@ -101,6 +113,7 @@ const railTip = (scan: ScanItem) =>
         <button class="item" :class="{ active: scan.id === state.selectedId }" @click="selectScan(scan.id)">
           <span class="thumb" :data-status="scan.status" aria-hidden="true">
             <img v-if="scan.thumbnail" :src="scan.thumbnail" alt="" />
+            <span v-else-if="scan.missing" class="gone">?</span>
             <span v-else class="spinner"></span>
           </span>
           <span class="meta">
@@ -119,6 +132,12 @@ const railTip = (scan: ScanItem) =>
         {{ state.scans.length ? "Nothing in this view." : "Add scans, or drop them on the window." }}
       </li>
     </ul>
+
+    <div class="foot">
+      <button class="btn" title="Start again with an empty list. This project stays saved." @click="emit('newProject')">
+        Create new project…
+      </button>
+    </div>
   </aside>
 </template>
 
@@ -149,6 +168,23 @@ const railTip = (scan: ScanItem) =>
 }
 .count .progress {
   width: 40px;
+}
+.rail svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.foot {
+  padding: 0.6rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+.foot .btn {
+  width: 100%;
+  justify-content: center;
 }
 .strip {
   display: grid;
@@ -271,6 +307,10 @@ const railTip = (scan: ScanItem) =>
   max-width: 100%;
   max-height: 100%;
   display: block;
+}
+.gone {
+  color: var(--muted);
+  font-weight: 700;
 }
 .spinner {
   width: 16px;

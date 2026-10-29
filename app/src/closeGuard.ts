@@ -1,4 +1,6 @@
-// Decides whether closing the window would throw away work. Pure data, so it is tested without a window.
+// What closing the window now would leave undone. Projects save themselves, so only a running export
+// still needs a warning; the counts are kept for the statistics a later phase adds. Pure data, so it is
+// tested without a window.
 
 export interface GuardBox {
   cx: number;
@@ -32,6 +34,7 @@ export interface CloseAssessment {
   editedUnapproved: number;
   /** An export is running; closing now can leave half-written images. */
   exporting: boolean;
+  /** Whether closing should ask first: only while an export is running. */
   needsConfirm: boolean;
 }
 
@@ -54,6 +57,6 @@ export function assessClose(scans: GuardScan[], exporting: boolean): CloseAssess
     changedSinceExport,
     editedUnapproved,
     exporting,
-    needsConfirm: exporting || neverExported + changedSinceExport + editedUnapproved > 0,
+    needsConfirm: exporting,
   };
 }

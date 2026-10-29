@@ -7,14 +7,15 @@
 mod batch;
 mod engine;
 mod models;
+mod projects;
 mod settings;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::State;
 use tauri::ipc::Channel;
+use tauri::{Emitter, Manager, State};
 
 use batch::{DetectEvent, ExportEvent, ExportItem, ExportOptions, ExportSummary, FlagDto, IdBox};
 use engine::{DetectSettings, ScanAnalysis};
@@ -38,12 +39,62 @@ fn to_strings(paths: Vec<PathBuf>) -> Vec<String> {
         .collect()
 }
 
-/// Scans named on the command line (`oxicut-app.exe scan.tif folder\`), so the
-/// app can be started on a batch, or used as an "open with" target.
+/// What the command line asked for: a project to open and scans to add to it.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StartupArgs {
+    project: Option<String>,
+    scans: Vec<String>,
+}
+
+fn startup_from(args: &[PathBuf]) -> StartupArgs {
+    let (project, rest) = projects::split_startup(args);
+    StartupArgs {
+        project: project.map(|p| p.to_string_lossy().into_owned()),
+        scans: to_strings(engine::expand_paths(&rest)),
+    }
+}
+
+/// Arguments of this launch (`oxicut-app.exe project.oxicut scan.tif folder\`): double-clicking a
+/// project, "open with", or starting the app on a batch of scans.
 #[tauri::command]
-fn startup_paths() -> Vec<String> {
+fn startup_args() -> StartupArgs {
     let args: Vec<PathBuf> = std::env::args_os().skip(1).map(PathBuf::from).collect();
-    to_strings(engine::expand_paths(&args))
+    startup_from(&args)
+}
+
+/// The folder new projects go in (`Documents\OxiCut`).
+#[tauri::command]
+fn projects_dir() -> String {
+    projects::default_dir().to_string_lossy().into_owned()
+}
+
+/// Make an empty project called `name` in the projects folder; returns its path.
+#[tauri::command(async)]
+fn project_new(name: String) -> Result<String, String> {
+    projects::create(&projects::default_dir(), &name).map(|p| p.to_string_lossy().into_owned())
+}
+
+#[tauri::command(async)]
+fn project_open(path: String) -> Result<projects::OpenedProject, String> {
+    projects::open(&PathBuf::from(path))
+}
+
+#[tauri::command(async)]
+fn project_save(path: String, mut project: projects::Project) -> Result<(), String> {
+    projects::save(&PathBuf::from(path), &mut project)
+}
+
+/// Rename a project file; returns the new path.
+#[tauri::command(async)]
+fn project_rename(path: String, name: String) -> Result<String, String> {
+    projects::rename(&PathBuf::from(path), &name).map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Whether each of these files exists, in the same order (for the recent-projects list).
+#[tauri::command(async)]
+fn files_exist(paths: Vec<String>) -> Vec<bool> {
+    paths.iter().map(|p| PathBuf::from(p).is_file()).collect()
 }
 
 /// Files and folders (from a dialog or a drop) as a flat list of scans.
@@ -97,6 +148,15 @@ async fn detect_one(
 async fn get_preview(path: String, state: State<'_, AppState>) -> Result<String, String> {
     let cache = state.cache_dir.clone();
     tauri::async_runtime::spawn_blocking(move || engine::load_preview(&PathBuf::from(path), &cache))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The queue thumbnail of a scan, as a data URL (rebuilt when the cache lost it).
+#[tauri::command]
+async fn get_thumbnail(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    let cache = state.cache_dir.clone();
+    tauri::async_runtime::spawn_blocking(move || engine::load_thumbnail(&PathBuf::from(path), &cache))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -168,6 +228,16 @@ async fn download_models(ids: Vec<String>, on_event: Channel<DownloadEvent>) -> 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // First, so a second launch (double-clicking another project) hands its arguments to the
+        // window that is already open instead of starting a second copy.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let args: Vec<PathBuf> = args.into_iter().skip(1).map(PathBuf::from).collect();
+            let _ = app.emit("second-instance", startup_from(&args));
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(AppState {
@@ -175,7 +245,14 @@ pub fn run() {
             cache_dir: settings::cache_dir(),
         })
         .invoke_handler(tauri::generate_handler![
-            startup_paths,
+            startup_args,
+            projects_dir,
+            project_new,
+            project_open,
+            project_save,
+            project_rename,
+            files_exist,
+            get_thumbnail,
             expand_paths,
             detect_scans,
             cancel_detection,

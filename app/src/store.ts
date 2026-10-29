@@ -1,6 +1,7 @@
 // The app's state and the actions on it. Components read `state` and call these.
 
 import { computed, reactive, watch } from "vue";
+import { fromRecord, nextIdAfter, projectKey, toProjectFile, type RestoredStatus, type SavedScan } from "./projectRecord";
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
@@ -33,6 +34,8 @@ export interface ScanItem {
   detectedKey: string;
   /** `boxesKey` of the boxes last exported successfully. */
   exportedKey: string | null;
+  /** The scan file could not be found when the project was opened (moved or deleted). Not saved. */
+  missing: boolean;
 }
 
 /** A copy that later edits cannot change. */
@@ -61,9 +64,13 @@ export const defaultSettings: AppSettings = {
   tagSoftware: true,
   outputDir: null,
   autoApprove: true,
+  lastProject: null,
+  recentProjects: [],
 };
 
 export const state = reactive({
+  /** The project that is open: its `.oxicut` file, name (the file name) and creation time. */
+  project: { path: "", name: "", created: 0 },
   scans: [] as ScanItem[],
   selectedId: null as number | null,
   settings: { ...defaultSettings } as AppSettings,
@@ -84,9 +91,8 @@ export const approvedCount = computed(() => state.scans.filter((s) => s.status =
 export const pendingCount = computed(() => state.scans.filter((s) => s.status === "pending").length);
 /** What closing the window now would throw away. */
 export const closeAssessment = computed(() => assessClose(state.scans, state.exporting.active));
-export const exportableCount = computed(
-  () => state.scans.filter((s) => s.status === "approved" && s.boxes.length > 0).length,
-);
+const canExport = (s: ScanItem) => s.status === "approved" && s.boxes.length > 0 && !s.missing;
+export const exportableCount = computed(() => state.scans.filter(canExport).length);
 
 let nextScanId = 1;
 let nextBoxId = 1;
@@ -271,12 +277,17 @@ function makeScan(path: string): ScanItem {
     epoch: 0,
     detectedKey: "",
     exportedKey: null,
+    missing: false,
   };
 }
 
 /** Add scans, files and folders mixed; new ones are detected straight away. */
 export async function addPaths(paths: string[]) {
   if (!paths.length) return;
+  if (!state.project.path) {
+    say("OxiCut is still starting. Try again in a moment.");
+    return;
+  }
   let expanded: string[];
   try {
     expanded = await api.expandPaths(paths);
@@ -433,7 +444,7 @@ export async function chooseOutputFolder() {
 /** Export every approved scan; `true` when all of them were written. */
 export async function exportApproved(): Promise<boolean> {
   if (state.exporting.active) return false;
-  const items = state.scans.filter((s) => s.status === "approved" && s.boxes.length > 0);
+  const items = state.scans.filter(canExport);
   if (!items.length) {
     say("Nothing to export yet: approve at least one scan that has boxes.");
     return false;
@@ -518,17 +529,194 @@ export async function downloadModels(ids: string[]) {
   }
 }
 
+// ----------------------------------------------------------------- projects
+// A project is one `.oxicut` file holding the scan list, boxes and approvals. It saves itself a
+// second after every change, so closing the app (or a crash) loses nothing worth mentioning.
+
+const projectJson = computed(() => projectKey(state.scans));
+
+/** `projectJson` as last written to (or read from) the file; saving is only needed when it differs. */
+let lastSaved = "";
+let projectTimer: number | undefined;
+let saving: Promise<void> = Promise.resolve();
+/** True while another project is being put in place, so its scans are not mistaken for edits. */
+let switching = false;
+
+const projectNameOf = (path: string) => (path.split(/[\\/]/).pop() ?? path).replace(/\.oxicut$/i, "");
+
+async function writeProject() {
+  if (!state.project.path || switching) return;
+  const json = projectJson.value;
+  if (json === lastSaved) return;
+  try {
+    await api.projectSave(state.project.path, toProjectFile(state.scans, state.project.created));
+    lastSaved = json;
+    rememberProject();
+  } catch (e) {
+    say(`Could not save the project: ${errorText(e)}`, 15000);
+  }
+}
+
+/** Write any change that is still waiting for its timer (used before switching projects and on closing). */
+export function flushProject(): Promise<void> {
+  window.clearTimeout(projectTimer);
+  projectTimer = undefined;
+  saving = saving.then(writeProject);
+  return saving;
+}
+
+watch(projectJson, (json) => {
+  if (!state.project.path || switching || json === lastSaved) return;
+  window.clearTimeout(projectTimer);
+  projectTimer = window.setTimeout(() => void flushProject(), 1000);
+});
+
+/** Put the open project first in the recent list, with the numbers the Projects list shows. */
+function rememberProject() {
+  const entry: api.RecentProject = {
+    path: state.project.path,
+    scans: state.scans.length,
+    approved: approvedCount.value,
+    updated: Math.floor(Date.now() / 1000),
+  };
+  const rest = state.settings.recentProjects.filter((p) => p.path.toLowerCase() !== entry.path.toLowerCase());
+  state.settings.recentProjects = [entry, ...rest].slice(0, 12);
+  state.settings.lastProject = entry.path;
+}
+
+export function forgetProject(path: string) {
+  state.settings.recentProjects = state.settings.recentProjects.filter((p) => p.path.toLowerCase() !== path.toLowerCase());
+}
+
+function restoreScan(saved: SavedScan & { status: RestoredStatus }, missing: boolean): ScanItem {
+  return {
+    ...saved,
+    boxes: saved.boxes.map(withId),
+    thumbnail: null,
+    flags: [],
+    revision: 0,
+    history: new History<BoxItem[]>(),
+    epoch: 0,
+    missing,
+  };
+}
+
+/** Load the thumbnails of a reopened project a few at a time; the queue shows a spinner meanwhile. */
+async function loadThumbnails(scans: ScanItem[]) {
+  const queue = [...scans];
+  const worker = async () => {
+    for (let scan = queue.shift(); scan; scan = queue.shift()) {
+      try {
+        scan.thumbnail = await api.getThumbnail(scan.path);
+      } catch {
+        /* the review canvas says what is wrong with this scan when it is opened */
+      }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+
+/** What a freshly opened project still needs: detection for scans that never finished, flags, thumbnails. */
+async function finishOpening() {
+  const scans = [...state.scans];
+  const lost = scans.filter((s) => s.missing).length;
+  if (lost) say(`${lost} scan${lost === 1 ? " was" : "s were"} not found (moved or deleted). Their boxes are kept.`, 12000);
+  const interrupted = scans.filter((s) => s.status === "queued" && !s.missing);
+  if (interrupted.length) {
+    state.detect.total += interrupted.length;
+    void runDetection(interrupted);
+  }
+  void loadThumbnails(scans.filter((s) => s.width > 0 && !s.missing));
+  for (const scan of scans) if (scan.boxes.length) await refreshFlags(scan);
+}
+
+/** Switch to the project in `path`. `false` if that was not possible (the reason is in the status bar). */
+export async function openProject(path: string): Promise<boolean> {
+  if (state.detect.active || state.exporting.active) {
+    say("Wait until detection and export have finished before opening another project.");
+    return false;
+  }
+  await flushProject();
+  let opened: api.OpenedProject;
+  try {
+    opened = await api.projectOpen(path);
+  } catch (e) {
+    say(errorText(e), 15000);
+    return false;
+  }
+  switching = true;
+  try {
+    previews.clear();
+    const missing = new Set(opened.missing);
+    nextScanId = nextIdAfter(opened.project.scans);
+    state.project = { path: opened.path, name: opened.name, created: opened.project.created };
+    state.scans = opened.project.scans.map((r) => restoreScan(fromRecord(r), missing.has(r.id)));
+    state.selectedId = state.scans[0]?.id ?? null;
+    lastSaved = projectJson.value;
+    rememberProject();
+  } finally {
+    switching = false;
+  }
+  void finishOpening();
+  return true;
+}
+
+/** Make a new, empty project called `name` and open it. */
+export async function newProject(name: string): Promise<boolean> {
+  try {
+    return await openProject(await api.projectNew(name));
+  } catch (e) {
+    say(`Could not create the project: ${errorText(e)}`, 15000);
+    return false;
+  }
+}
+
+export async function renameProject(name: string): Promise<boolean> {
+  await flushProject();
+  try {
+    const old = state.project.path;
+    const path = await api.projectRename(old, name);
+    state.project.path = path;
+    state.project.name = projectNameOf(path);
+    forgetProject(old);
+    rememberProject();
+    return true;
+  } catch (e) {
+    say(errorText(e), 12000);
+    return false;
+  }
+}
+
+/** A launch (or a second launch while the app is open) asked for a project and/or scans. */
+export async function handleLaunch(args: api.StartupArgs) {
+  if (args.project && args.project.toLowerCase() !== state.project.path.toLowerCase()) await openProject(args.project);
+  if (args.scans.length) await addPaths(args.scans);
+}
+
 // ------------------------------------------------------------------ startup
+
+/** Open the project asked for, else the one used last time, else make the first one. */
+async function openStartProject(wanted: string | null) {
+  if (wanted) {
+    const [exists] = await api.filesExist([wanted]).catch(() => [false]);
+    if (exists && (await openProject(wanted))) return;
+    if (!exists) say("The project you used last could not be found, so a new one was started.", 10000);
+  }
+  await newProject("My scans");
+}
 
 export async function initApp() {
   await initSettings();
   void api.appVersion().then((v) => (state.version = v));
   void refreshModels();
+  let launch: api.StartupArgs = { project: null, scans: [] };
   try {
-    await addPaths(await api.startupPaths());
+    launch = await api.startupArgs();
   } catch (e) {
-    say(`Could not open the scans given on the command line: ${errorText(e)}`);
+    say(`Could not read the command line: ${errorText(e)}`);
   }
+  await openStartProject(launch.project ?? state.settings.lastProject);
+  if (launch.scans.length) await addPaths(launch.scans);
 }
 
 /** Example output name for the settings panel, from the selected scan. */

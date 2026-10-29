@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow, type CloseRequestedEvent } from "@tauri-apps/api/window";
 import CloseDialog from "./components/CloseDialog.vue";
+import ProjectsDialog from "./components/ProjectsDialog.vue";
 import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
+import type { StartupArgs } from "./api";
 import { layout, togglePanel, toggleQueue } from "./layout";
 import {
   addPaths,
@@ -18,7 +21,9 @@ import {
   closeAssessment,
   exportApproved,
   exportableCount,
+  flushProject,
   flushSettings,
+  handleLaunch,
   initApp,
   redetect,
   redo,
@@ -43,8 +48,17 @@ const showWelcome = ref(!welcomeSeen());
 const dragging = ref(false);
 const showClose = ref(false);
 const showSettings = ref(false);
+const showProjects = ref(false);
+/** Which part of the Projects dialog opens first: the list, or straight into starting a new project. */
+const projectsStart = ref<"list" | "new">("list");
+
+function openProjects(start: "list" | "new") {
+  projectsStart.value = start;
+  showProjects.value = true;
+}
 let unlisten: (() => void) | undefined;
 let unlistenClose: (() => void) | undefined;
+let unlistenLaunch: (() => void) | undefined;
 
 function closeWelcome() {
   showWelcome.value = false;
@@ -65,6 +79,7 @@ async function onCloseRequested(event: CloseRequestedEvent) {
   event.preventDefault();
   if (showClose.value) return;
   await flushSettings();
+  await flushProject();
   if (closeAssessment.value.needsConfirm) showClose.value = true;
   else await getCurrentWindow().destroy();
 }
@@ -74,7 +89,7 @@ function onKeydown(event: KeyboardEvent) {
   if (!event.ctrlKey || event.altKey || event.metaKey) return;
   const key = event.key.toLowerCase();
   if (key !== "b" && key !== ",") return;
-  if (showWelcome.value || showClose.value) return;
+  if (showWelcome.value || showClose.value || showProjects.value) return;
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
   event.preventDefault();
@@ -103,6 +118,8 @@ onMounted(async () => {
     }
   });
   unlistenClose = await getCurrentWindow().onCloseRequested(onCloseRequested);
+  // Double-clicking another project (or scans) while this window is open arrives here, not in a new window.
+  unlistenLaunch = await listen<StartupArgs>("second-instance", (event) => void handleLaunch(event.payload));
   void initApp();
 });
 
@@ -110,6 +127,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   unlisten?.();
   unlistenClose?.();
+  unlistenLaunch?.();
 });
 </script>
 
@@ -117,6 +135,9 @@ onBeforeUnmount(() => {
   <div class="app" :class="{ 'queue-collapsed': layout.queueCollapsed, 'panel-collapsed': layout.panelCollapsed }">
     <header class="top">
       <div class="brand"><span>Oxi</span>Cut</div>
+      <button class="btn ghost project" title="Projects: open, start or rename" @click="openProjects('list')">
+        {{ state.project.name || "Project" }} ▾
+      </button>
       <span class="chip">Detector {{ state.settings.mode }}</span>
       <span class="grow"></span>
       <template v-if="state.detect.active">
@@ -129,11 +150,11 @@ onBeforeUnmount(() => {
       </button>
     </header>
 
-    <ScanQueue />
+    <ScanQueue @new-project="openProjects('new')" />
 
     <ReviewCanvas
       :scan="selectedScan"
-      :keys-enabled="!showWelcome && !showClose && !showSettings"
+      :keys-enabled="!showWelcome && !showClose && !showSettings && !showProjects"
       @approve="approveAndAdvance"
       @step="step"
       @edit="selectedScan && updateBoxes(selectedScan, $event)"
@@ -147,7 +168,7 @@ onBeforeUnmount(() => {
     <footer class="status">
       <span class="message">{{ state.notice || "Ready" }}</span>
       <span class="grow"></span>
-      <span class="muted">{{ state.scans.length }} scans · {{ approvedCount }} approved</span>
+      <span class="muted">{{ state.scans.length }} {{ state.scans.length === 1 ? "scan" : "scans" }} · {{ approvedCount }} approved</span>
       <span v-if="state.version" class="muted" title="OxiCut version">OxiCut {{ state.version }}</span>
       <button class="btn ghost settings" title="Settings (Ctrl+,)" @click="showSettings = true">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -166,9 +187,10 @@ onBeforeUnmount(() => {
 
     <SettingsDialog v-if="showSettings" @close="showSettings = false" />
 
+    <ProjectsDialog v-if="showProjects" :start="projectsStart" @close="showProjects = false" />
+
     <CloseDialog
       v-if="showClose"
-      :assessment="closeAssessment"
       @keep="showClose = false"
       @discard="getCurrentWindow().destroy()"
     />
@@ -218,6 +240,13 @@ onBeforeUnmount(() => {
 }
 .small {
   font-size: 12px;
+}
+.project {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 }
 .settings {
   height: 22px;

@@ -5,6 +5,18 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+/// A project the user opened lately, with what the Projects list shows about it (kept up to date
+/// whenever the project is saved, so listing needs no file reads).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct RecentProject {
+    pub path: String,
+    pub scans: u32,
+    pub approved: u32,
+    /// Seconds since 1970.
+    pub updated: u64,
+}
+
 /// Everything the Settings panel edits. Missing fields fall back to defaults,
 /// so a settings file from an older version still loads.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,6 +42,10 @@ pub struct AppSettings {
     pub output_dir: Option<String>,
     /// Approve scans with nothing to flag as soon as they are detected.
     pub auto_approve: bool,
+    /// The project reopened when the app starts.
+    pub last_project: Option<String>,
+    /// Recently used projects, most recent first.
+    pub recent_projects: Vec<RecentProject>,
 }
 
 impl Default for AppSettings {
@@ -47,6 +63,8 @@ impl Default for AppSettings {
             tag_software: true,
             output_dir: None,
             auto_approve: true,
+            last_project: None,
+            recent_projects: Vec::new(),
         }
     }
 }
@@ -105,6 +123,7 @@ mod tests {
         assert_eq!(from_old.pattern, "{source}-{n}");
         assert!(from_old.auto_approve);
         assert_eq!(from_old.theme, "system");
+        assert!(from_old.last_project.is_none() && from_old.recent_projects.is_empty());
     }
 
     #[test]

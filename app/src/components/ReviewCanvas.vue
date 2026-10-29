@@ -32,6 +32,8 @@ const loadError = ref("");
 const boxCount = ref(0);
 const hasSelection = ref(false);
 const zoomPercent = ref(100);
+// A scan that cannot be found has no canvas to count on, so its saved boxes are the answer.
+const shownBoxes = computed(() => (props.scan?.missing ? props.scan.boxes.length : boxCount.value));
 
 let canvas: Canvas | undefined;
 let observer: ResizeObserver | undefined;
@@ -307,6 +309,12 @@ async function rebuild() {
   const scan = props.scan;
   if (!scan || scan.width === 0 || scan.status === "error") {
     loading.value = false;
+    return;
+  }
+  if (scan.missing) {
+    loading.value = false;
+    loadError.value =
+      "This scan could not be found: it was moved or deleted. Put the file back where it was and open the project again. Its boxes are kept.";
     return;
   }
   loading.value = true;
@@ -628,7 +636,7 @@ watch(() => props.scan?.flags, restyle, { deep: true });
         <span class="chip" :class="{ ok: scan.status === 'approved', warn: scan.status === 'flagged' || scan.status === 'error' }">
           {{ scan.status }}
         </span>
-        <span v-if="ready" class="muted">{{ boxCount }} {{ boxCount === 1 ? "item" : "items" }} · {{ scan.width }}×{{ scan.height }} px</span>
+        <span v-if="ready" class="muted">{{ shownBoxes }} {{ shownBoxes === 1 ? "item" : "items" }} · {{ scan.width }}×{{ scan.height }} px</span>
         <span v-for="message in flagMessages" :key="message" class="chip warn">{{ message }}</span>
       </template>
       <span class="grow"></span>
