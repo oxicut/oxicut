@@ -40,6 +40,7 @@ jobs:
       # Keep the compiled crates, even from a run that failed later on, so the next run starts warm.
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: windows
           cache-on-failure: true
 
       # Downloads made while building: the installer tools (NSIS, WebView2 helper) and ONNX Runtime.

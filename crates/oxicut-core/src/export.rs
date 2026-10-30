@@ -379,10 +379,26 @@ impl<'a> ScanExport<'a> {
         region: &RotatedRect,
         number: usize,
     ) -> Result<Option<WrittenCrop>, ExportError> {
+        self.write_named(image, region, number, None)
+    }
+
+    /// Like `write`, but with a file name (without extension) chosen by the caller, for example the
+    /// `-front` and `-back` names of a pair. It is cleaned up like any name, and still never replaces
+    /// a file that exists (unless the settings say so). `None` uses the naming pattern.
+    pub fn write_named(
+        &self,
+        image: &DynamicImage,
+        region: &RotatedRect,
+        number: usize,
+        name: Option<&str>,
+    ) -> Result<Option<WrittenCrop>, ExportError> {
         let Some(crop) = crop_region(image, region) else {
             return Ok(None);
         };
-        let name = expand_pattern(&self.settings.pattern, &self.stem, number);
+        let name = match name {
+            Some(chosen) => sanitize_file_name(chosen),
+            None => expand_pattern(&self.settings.pattern, &self.stem, number),
+        };
         let path = target_path(
             self.out_dir,
             &name,
@@ -551,6 +567,39 @@ mod tests {
             export_regions(&scan(), &source, &regions(), &dir.join("out"), &settings).unwrap();
         assert!(second[0].path.ends_with("my scan-1 (2).png"));
         assert_eq!(std::fs::read_dir(dir.join("out")).unwrap().count(), 4);
+    }
+
+    #[test]
+    fn a_chosen_name_replaces_the_pattern_and_is_never_overwritten() {
+        let dir = scratch("chosen-name");
+        let source = dir.join("s.png");
+        let settings = ExportSettings {
+            format: OutputFormat::Png,
+            ..Default::default()
+        };
+        let out = dir.join("out");
+        let export = ScanExport::new(&source, &out, &settings).unwrap();
+        let region = &regions()[0];
+        let first = export
+            .write_named(&scan(), region, 1, Some("card-1-front"))
+            .unwrap()
+            .unwrap();
+        assert!(first.file.path.ends_with("card-1-front.png"));
+        // A name that tries to leave the folder is cleaned like any other.
+        let odd = export
+            .write_named(&scan(), region, 1, Some("../card"))
+            .unwrap()
+            .unwrap();
+        assert!(odd.file.path.starts_with(&out));
+        // The same name again gets a number instead of replacing the file.
+        let again = export
+            .write_named(&scan(), region, 1, Some("card-1-front"))
+            .unwrap()
+            .unwrap();
+        assert!(again.file.path.ends_with("card-1-front (2).png"));
+        // No name: the pattern decides, as before.
+        let plain = export.write(&scan(), region, 1).unwrap().unwrap();
+        assert!(plain.file.path.ends_with("s-1.png"));
     }
 
     #[test]

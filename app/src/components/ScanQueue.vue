@@ -6,6 +6,8 @@ import {
   addScansFromDialog,
   approveAllUnflagged,
   approvedCount,
+  backsOf,
+  frontsOf,
   pendingCount,
   removeScan,
   selectScan,
@@ -121,6 +123,8 @@ const railTip = (scan: ScanItem) =>
             <span class="sub">
               <span class="chip" :class="chipClass(scan)">{{ statusLabel(scan) }}</span>
               <span v-if="scan.width" class="muted">{{ scan.boxes.length }} {{ scan.boxes.length === 1 ? "item" : "items" }}</span>
+              <span v-if="backsOf(scan)" class="muted" :title="`The backs are on ${backsOf(scan)!.name}`">fronts</span>
+              <span v-else-if="frontsOf(scan)" class="muted" :title="`The backs of ${frontsOf(scan)!.name}`">backs</span>
             </span>
             <span v-if="scan.status === 'error'" class="flags" :title="scan.error ?? ''">{{ scan.error }}</span>
             <span v-else-if="scan.flags.length" class="flags">{{ flagText(scan) }}</span>

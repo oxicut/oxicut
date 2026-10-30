@@ -48,13 +48,22 @@ Things worth checking in particular:
 
 Change `version` in the root `Cargo.toml` (it feeds the app, the installer and the command line), push, then on GitHub open Actions, choose *Release* and *Run workflow*. It runs the tests, builds the installer and publishes a release named `v<version>` with `OxiCut-setup.exe`. Running it again for the same version replaces that release. Install the result on a clean machine and check: it starts, the About window shows the version, and double-clicking a `.oxicut` file opens it.
 
+## Fronts and backs
+
+Scan the fronts of some postcards, then turn the stack over and scan the backs. Add both scans, open the **Crops** view on the scan of the fronts and choose **Backs are on another scan…**. Check:
+
+- every front card shows its back beside it, the names read `name-1-front` and `name-1-back`, and the scan list says "fronts" and "backs";
+- *Its back* changes the back (a back taken from another card is moved), *Not a pair* saves both on their own again, *Match again* starts over, *Stop pairing* undoes the link;
+- *Export this scan* on either scan saves both scans together, into the fronts' `OxiCut output` folder (or the folder chosen in the Export tab), and *Export all approved* leaves a pair out while the other scan is not approved, and says so;
+- close the app and open it again: the pairs are still there; delete one crop and press Undo: its pair comes back.
+
 ## Known gaps
 
 - v7-lite is only part of ScanSplitter's v7 (no models): it finds the same number of prints as v3. The full v7 is much better at counting them, but a whole album page can still come out as one box, as in ScanSplitter.
 - Both detectors can miss pale prints on a white background and can merge prints that touch. These are the same limits ScanSplitter's v3 has, which is where the detector comes from.
 - EXIF is copied from JPEG and PNG scans only; from a TIFF scan the crops get the resolution and colour profile, not the EXIF (dates, scanner make).
-- Projects are saved, but there is no front/back pairing for postcards yet, and a scan file that has moved cannot be re-linked from inside the app (move it back, or keep the scans next to the project file).
-- No front/back pairing yet (postcards).
+- Projects are saved, and a scan file that has moved cannot be re-linked from inside the app (move it back, or keep the scans next to the project file).
+- Fronts and backs are matched by where the pictures lie (mirrored left to right, or top to bottom, whichever fits better); it cannot read what is on the card. A stack turned over in a different order needs a swap by hand (the *Its back* menu on each card).
 - JPEG files are decoded by a different library than ScanSplitter used, so on hard test images the boxes can differ slightly from ScanSplitter's. TIFF and PNG decode identically.
 
 ## Where things are kept

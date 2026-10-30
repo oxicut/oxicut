@@ -159,3 +159,13 @@ The address has one source: `repository` and `homepage` in the workspace `Cargo.
 The repository `oxicut/oxicut` is the remote. The version has one source, the workspace `Cargo.toml` (0.0.1): `oxicut_core::VERSION` reads it, `tauri.conf.json` no longer sets its own, and `app/package.json` matches. The installer is an NSIS per-user setup (no administrator prompt) with the publisher and description set.
 
 `.github/workflows/release.yml` is started by hand. It runs the Rust and web tests, builds the installer, and replaces the GitHub release `v<version>` (deleting the old release and tag first) with `OxiCut-setup.exe`, the versioned installer and `SHA256SUMS.txt`, marked as a test version unless unticked. This is the loop for redoing 0.0.1 until it is right.
+
+## Front and back pairing (2026-10-30)
+
+A scan of the fronts of a stack of postcards can be linked to the scan of the same stack turned over (Crops view, **Backs are on another scan…**). The pictures are matched by where they lie (`app/src/pairing.ts`): the backs are tried mirrored left to right (turned like a book page) and mirrored top to bottom, and the better fit wins, with ties going to left to right. Each card of a front shows its back and an *Its back* menu; *Not a pair*, *Match again* and *Stop pairing* undo what the matching got wrong. ScanSplitter only links whole scans (`back_of`) and never names the files, so the matching and the naming are new here.
+
+The rules: one scan of fronts to one scan of backs, a scan is fronts or backs but not both, a picture is in one pair. Pairs whose picture is removed stay out of use rather than being deleted, so Undo brings them back; a re-detect gives new pictures, and if no pair survived it, the scans are matched again.
+
+Export: a pair of scans goes out together (*Export this scan* on either one; *Export all approved* leaves a scan out until its partner is approved too). The front keeps its usual name plus `-front`, the back gets the front's name plus `-back`, and the back is saved in the front's output folder. The engine got `ScanExport::write_named`, the app's `ExportItem` got optional `names` and `folderOf`, and `final_crop` takes the name so the larger view cuts the file an export would write. Projects keep the link and the pairs (`backsOn`, `pairs` as positions in the two box lists, since box ids are made fresh on open); older files open unpaired.
+
+Checked in the app with a scan and a mirrored copy as its backs: matched, named, closed and reopened with the pairs intact, exported into one folder (`cards-1-front`, `cards-1-back`, ...).

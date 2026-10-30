@@ -49,6 +49,11 @@ pub struct ScanRecord {
     pub exported_key: Option<String>,
     /// The files the last export wrote for this scan.
     pub exported_files: Vec<String>,
+    /// The scan holding the backs of this scan's pictures, when this is a scan of fronts.
+    pub backs_on: Option<u32>,
+    /// Which picture on this scan goes with which on `backs_on`: positions in the two box lists
+    /// (front, back), since screen ids of boxes are not kept.
+    pub pairs: Vec<[usize; 2]>,
     pub error: Option<String>,
 }
 
@@ -307,6 +312,8 @@ mod tests {
             detected_key: "500,350,300,200,3.5".into(),
             exported_key: Some("500,350,300,200,3.5".into()),
             exported_files: vec!["D:/out/a-1.tif".into()],
+            backs_on: Some(7),
+            pairs: vec![[0, 0]],
             ..Default::default()
         }
     }
@@ -367,6 +374,7 @@ mod tests {
         assert_eq!(project.scans.len(), 1);
         assert_eq!(project.scans[0].id, 3);
         assert!(project.scans[0].boxes.is_empty());
+        assert_eq!((project.scans[0].backs_on, project.scans[0].pairs.len()), (None, 0));
         assert_eq!(project.format_version, 0);
     }
 

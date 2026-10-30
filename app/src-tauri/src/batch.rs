@@ -10,7 +10,7 @@ use std::time::Instant;
 use oxicut_core::RotatedRect;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use oxicut_core::export::{Collision, ExportSettings, OutputFormat, ScanExport, export_regions};
+use oxicut_core::export::{Collision, ExportSettings, OutputFormat, ScanExport};
 use oxicut_core::flags::{IdentifiedBox, evaluate_scan};
 use oxicut_core::io::load_image;
 use rayon::prelude::*;
@@ -129,10 +129,19 @@ pub fn flags_for(boxes: &[IdBox], width: u32, height: u32) -> Vec<FlagDto> {
         .collect()
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportItem {
     pub path: String,
     pub boxes: Vec<BoxDto>,
+    /// A file name (without extension) for each box, in the same order; `None`, or no entry, uses the
+    /// naming pattern. Pairs of fronts and backs are named this way.
+    #[serde(default)]
+    pub names: Vec<Option<String>>,
+    /// A scan whose `OxiCut output` folder to use instead of this scan's own: the backs of a pair are
+    /// saved next to their fronts.
+    #[serde(default)]
+    pub folder_of: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -186,6 +195,15 @@ pub struct ExportSummary {
     pub first_file: Option<String>,
 }
 
+/// Where the crops of the scan at `scan` go: the folder chosen in the settings, or an `OxiCut output`
+/// folder beside the scan.
+fn output_folder(options: &ExportOptions, scan: &Path) -> PathBuf {
+    match &options.output_dir {
+        Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
+        _ => scan.parent().unwrap_or(Path::new(".")).join("OxiCut output"),
+    }
+}
+
 pub fn parse_format(text: &str) -> Result<OutputFormat, String> {
     match text {
         "same" => Ok(OutputFormat::Same),
@@ -222,13 +240,7 @@ pub fn export_batch(
         });
         let started = Instant::now();
 
-        let out_dir = match &options.output_dir {
-            Some(dir) if !dir.trim().is_empty() => PathBuf::from(dir),
-            _ => source
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join("OxiCut output"),
-        };
+        let out_dir = output_folder(options, item.folder_of.as_deref().map(Path::new).unwrap_or(&source));
         // Exports never overwrite earlier ones: the user may have kept or renamed them.
         let settings = export_settings(options, format, Collision::Rename);
         let regions: Vec<RotatedRect> = item
@@ -239,12 +251,18 @@ pub fn export_batch(
 
         let outcome = catch_unwind(AssertUnwindSafe(|| -> Result<Vec<String>, String> {
             let image = load_image(&source).map_err(|e| format!("Could not read {name}: {e}"))?;
-            let files = export_regions(&image, &source, &regions, &out_dir, &settings)
-                .map_err(|e| e.to_string())?;
-            Ok(files
-                .into_iter()
-                .map(|f| f.path.to_string_lossy().into_owned())
-                .collect())
+            let export = ScanExport::new(&source, &out_dir, &settings).map_err(|e| e.to_string())?;
+            let mut files = Vec::new();
+            for (index, region) in regions.iter().enumerate() {
+                let name = item.names.get(index).and_then(|n| n.as_deref());
+                if let Some(done) = export
+                    .write_named(&image, region, index + 1, name)
+                    .map_err(|e| e.to_string())?
+                {
+                    files.push(done.file.path.to_string_lossy().into_owned());
+                }
+            }
+            Ok(files)
         }))
         .unwrap_or_else(|_| Err("export crashed on this scan".to_string()));
 
@@ -333,6 +351,7 @@ pub fn final_crop(
     source: &Path,
     region: &BoxDto,
     number: usize,
+    chosen_name: Option<&str>,
     options: &ExportOptions,
     scratch_dir: &Path,
 ) -> Result<FinalCrop, String> {
@@ -347,7 +366,7 @@ pub fn final_crop(
     let settings = export_settings(options, format, Collision::Overwrite);
     let rect = RotatedRect::new(region.cx, region.cy, region.w, region.h, region.angle);
     let written = ScanExport::new(source, scratch_dir, &settings)
-        .and_then(|export| export.write(&image, &rect, number))
+        .and_then(|export| export.write_named(&image, &rect, number, chosen_name))
         .map_err(|e| e.to_string())?
         .ok_or("This box lies outside the scan, so there is nothing to cut.")?;
 
@@ -380,6 +399,7 @@ pub fn final_crop(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxicut_core::export::export_regions;
     use image::{Rgb, RgbImage};
     use std::sync::{Arc, Mutex};
 
@@ -424,7 +444,7 @@ mod tests {
         write_scan(&scan);
         let scratch_dir = dir.join("scratch");
 
-        let cut = final_crop(&scan, &PRINT, 3, &options("png"), &scratch_dir).unwrap();
+        let cut = final_crop(&scan, &PRINT, 3, None, &options("png"), &scratch_dir).unwrap();
         // Named like the export names it (print number 3), full size, a PNG that is shown as it is.
         assert_eq!(Path::new(&cut.path), scratch_dir.join("holiday-3.png"));
         assert_eq!((cut.width, cut.height), (360, 460));
@@ -442,7 +462,7 @@ mod tests {
         assert_eq!(std::fs::read(&written[0].path).unwrap(), std::fs::read(&cut.path).unwrap());
 
         // Cutting again replaces the file instead of piling up " (2)" copies.
-        final_crop(&scan, &PRINT, 3, &options("png"), &scratch_dir).unwrap();
+        final_crop(&scan, &PRINT, 3, None, &options("png"), &scratch_dir).unwrap();
         assert_eq!(std::fs::read_dir(&scratch_dir).unwrap().count(), 1);
     }
 
@@ -451,7 +471,7 @@ mod tests {
         let dir = scratch("final-tiff");
         let scan = dir.join("holiday.png");
         write_scan(&scan);
-        let cut = final_crop(&scan, &PRINT, 1, &options("tiff"), &dir.join("scratch")).unwrap();
+        let cut = final_crop(&scan, &PRINT, 1, None, &options("tiff"), &dir.join("scratch")).unwrap();
         assert_eq!(cut.format, "tif");
         assert!(cut.shown_as_copy && cut.data_url.starts_with("data:image/jpeg;base64,"));
         let copy = STANDARD.decode(cut.data_url.trim_start_matches("data:image/jpeg;base64,")).unwrap();
@@ -465,7 +485,7 @@ mod tests {
         let scan = dir.join("holiday.png");
         write_scan(&scan);
         let outside = BoxDto { cx: 9000.0, cy: 9000.0, w: 100.0, h: 100.0, angle: 0.0 };
-        let error = final_crop(&scan, &outside, 1, &options("png"), &dir.join("scratch")).unwrap_err();
+        let error = final_crop(&scan, &outside, 1, None, &options("png"), &dir.join("scratch")).unwrap_err();
         assert!(error.contains("outside the scan"), "{error}");
     }
 
@@ -638,6 +658,7 @@ mod tests {
                 h: 360.0,
                 angle: 90.0,
             }],
+            ..Default::default()
         }];
         let options = ExportOptions {
             format: "png".into(),
@@ -663,6 +684,54 @@ mod tests {
     }
 
     #[test]
+    fn a_back_is_named_as_asked_and_saved_beside_its_front() {
+        let dir = scratch("export-pair");
+        let fronts = dir.join("fronts");
+        let backs = dir.join("backs");
+        std::fs::create_dir_all(&fronts).unwrap();
+        std::fs::create_dir_all(&backs).unwrap();
+        let front = fronts.join("cards.png");
+        let back = backs.join("cards-back-side.png");
+        write_scan(&front);
+        write_scan(&back);
+        let one = vec![BoxDto {
+            cx: 280.0,
+            cy: 350.0,
+            w: 360.0,
+            h: 460.0,
+            angle: 0.0,
+        }];
+        let items = vec![
+            ExportItem {
+                path: front.to_string_lossy().into_owned(),
+                boxes: one.clone(),
+                names: vec![Some("cards-1-front".into())],
+                folder_of: None,
+            },
+            ExportItem {
+                path: back.to_string_lossy().into_owned(),
+                boxes: one,
+                names: vec![Some("cards-1-back".into())],
+                folder_of: Some(front.to_string_lossy().into_owned()),
+            },
+        ];
+        let options = ExportOptions {
+            format: "png".into(),
+            jpeg_quality: 92,
+            pattern: "{source}-{n}".into(),
+            keep_metadata: true,
+            tag_software: true,
+            output_dir: None,
+        };
+        let summary = export_batch(&items, &options, &|_| {}).unwrap();
+        assert_eq!((summary.images, summary.failed), (2, 0));
+        let together = fronts.join("OxiCut output");
+        assert!(together.join("cards-1-front.png").is_file());
+        assert!(together.join("cards-1-back.png").is_file());
+        assert!(!backs.join("OxiCut output").exists());
+    }
+
+    #[test]
     fn export_honours_the_chosen_folder_and_reports_failures_without_stopping() {
         let dir = scratch("export-dir");
         let scan = dir.join("a.png");
@@ -679,10 +748,12 @@ mod tests {
             ExportItem {
                 path: dir.join("missing.png").to_string_lossy().into_owned(),
                 boxes: boxes.clone(),
+                ..Default::default()
             },
             ExportItem {
                 path: scan.to_string_lossy().into_owned(),
                 boxes,
+                ..Default::default()
             },
         ];
         let options = ExportOptions {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fromRecord, nextIdAfter, projectKey, restoreStatus, toProjectFile, toRecord } from "./projectRecord.ts";
+import { fromRecord, nextIdAfter, pairsFromPositions, projectKey, restoreStatus, toProjectFile, toRecord } from "./projectRecord.ts";
 
 const scan = {
   id: 4,
@@ -13,6 +13,8 @@ const scan = {
   detectedKey: "k",
   exportedKey: null,
   exportedFiles: ["D:/out/a-1.png"],
+  backsOn: null,
+  pairs: [],
   error: null,
 };
 
@@ -62,4 +64,31 @@ test("ids continue after the largest one used, and a project file lists every sc
   assert.equal(nextIdAfter([{ id: 3 }, { id: 9 }, { id: 5 }]), 10);
   assert.equal(toProjectFile([scan, { ...scan, id: 5 }], 77).scans.length, 2);
   assert.equal(toProjectFile([], 77).created, 77);
+});
+
+test("pairs are saved as positions and come back as positions", () => {
+  const box = (id: number) => ({ cx: id, cy: id, w: 1, h: 1, angle: 0, id });
+  const fronts = { ...scan, id: 1, boxes: [box(10), box(11), box(12)], backsOn: 2, pairs: [{ front: 11, back: 21 }, { front: 12, back: 20 }, { front: 10, back: 99 }] };
+  const backs = { ...scan, id: 2, boxes: [box(20), box(21)] };
+  const record = toRecord(fronts, [fronts, backs]);
+  // A pair whose picture does not exist any more is not saved.
+  assert.deepEqual(record.pairs, [[1, 1], [2, 0]]);
+  assert.equal(record.backsOn, 2);
+  const back = fromRecord(record);
+  assert.equal(back.backsOn, 2);
+  assert.deepEqual(back.pairPositions, [[1, 1], [2, 0]]);
+  assert.deepEqual(pairsFromPositions(back.pairPositions, [box(30), box(31), box(32)], [box(40), box(41)]), [
+    { front: 31, back: 41 },
+    { front: 32, back: 40 },
+  ]);
+  // Positions that point at nothing are dropped.
+  assert.deepEqual(pairsFromPositions([[5, 0], [0, 7]], [box(30)], [box(40)]), []);
+});
+
+test("an old record without pairs opens unpaired, and a pairing change changes what is saved", () => {
+  const old = fromRecord({ id: 1, path: "x.png" });
+  assert.equal(old.backsOn, null);
+  assert.deepEqual(old.pairPositions, []);
+  const before = projectKey([scan]);
+  assert.notEqual(before, projectKey([{ ...scan, backsOn: 9 }, { ...scan, id: 9 }]));
 });

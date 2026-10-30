@@ -7,6 +7,8 @@ export interface LightboxItem {
   box: BoxItem;
   index: number;
   name: string;
+  /** The name an export gives the file when it comes from a pair (without extension); `null`: the naming pattern decides. */
+  chosenName: string | null;
   /** The size the exported file will have. */
   width: number;
   height: number;
@@ -57,7 +59,7 @@ const made = new Map<string, api.FinalCrop>();
 
 function cutKey(current: LightboxItem): string {
   const { format, jpegQuality, pattern, keepMetadata, tagSoftware } = exportOptions();
-  return [current.scan.id, current.index, boxesKey([current.box]), format, jpegQuality, pattern, keepMetadata, tagSoftware].join("|");
+  return [current.scan.id, current.index, boxesKey([current.box]), current.chosenName, format, jpegQuality, pattern, keepMetadata, tagSoftware].join("|");
 }
 
 function showRemembered() {
@@ -76,7 +78,7 @@ async function showFinalResult() {
   cutError.value = "";
   try {
     const { cx, cy, w, h, angle } = current.box;
-    const done = await api.finalCrop(current.scan.path, { cx, cy, w, h, angle }, current.index + 1, exportOptions());
+    const done = await api.finalCrop(current.scan.path, { cx, cy, w, h, angle }, current.index + 1, current.chosenName, exportOptions());
     made.set(key, done);
     // The lightbox may have moved on to another crop while this was being cut.
     if (item.value === current) {
