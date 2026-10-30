@@ -27,7 +27,18 @@ jobs:
       # Same cache as the release workflow, so a pull request starts warm.
       - uses: Swatinem/rust-cache@v2
         with:
+          shared-key: windows
           cache-on-failure: true
+
+      # The same downloads cache as the release workflow (ONNX Runtime comes with the Rust build).
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/tauri
+            ~/AppData/Local/ort.pyke.io
+            ~/AppData/Roaming/ort.pyke.io
+          key: downloads-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: downloads-${{ runner.os }}-
 
       - uses: actions/setup-node@v4
         with:
