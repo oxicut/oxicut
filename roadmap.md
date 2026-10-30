@@ -136,7 +136,6 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 - [x] "Auto-pair" helper: pictures are matched by position, mirrored left to right or top to bottom (whichever fits), and the user can change any pair.
 - [x] Export approved crops only, format per settings: the **Crops view** (straightened pictures of every box with their file names, turn left or right, remove, larger view, "Export this scan"), and the Export tab lists what each export wrote. Re-export still adds " (2)" copies.
 - [ ] Optional JSON/CSV manifest of what was exported.
-- [ ] **Done when:** a 20-postcard project round-trips (close app, reopen, export pairs).
 - [ ] Commit + `docs/PROGRESS.md` entry.
 
 ## Phase 6: Later
