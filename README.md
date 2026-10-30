@@ -1,75 +1,89 @@
 # OxiCut
 
-A native Windows app that splits flatbed scans of photo prints and postcards into separate, straightened images. Put several prints on the scanner glass, scan once, and OxiCut finds each print, squares it up, and saves it as its own file. It runs fully automatically, or you can check and adjust every box first.
+Scan a whole pile of photos at once, and let OxiCut cut them apart. Put several prints or postcards on your flatbed scanner, scan once, and OxiCut finds each picture, straightens it and saves it as its own file. It can do everything by itself, or you can check every picture first.
 
-Status: early development (version 0.0.1). Windows only so far, and there is no installer yet: you build it from source (see [Building](#building-from-source)). Progress is tracked in [`roadmap.md`](roadmap.md) and [`docs/PROGRESS.md`](docs/PROGRESS.md).
+![OxiCut showing one scan with five photos, each inside an orange frame](docs/images/oxicut-scan-canvas.png)
 
-## Based on ScanSplitter
+*Every picture on the scan gets a frame. Move or turn a frame if it is not quite right.*
 
-OxiCut is a branch of [ScanSplitter](https://github.com/Madnex/ScanSplitter) by Madnex (GPL-3.0), version 0.8.0 (the checkout it was ported from is commit `b435ebb`). ScanSplitter is a Python and OpenCV tool with a web interface; its detection is what OxiCut builds on:
+![OxiCut showing the five finished pictures from one scan](docs/images/oxicut-crops.png)
 
-- **The detectors.** ScanSplitter's v3 (colour and edge based), v5 (MobileSAM anchors with texture and frame passes) and v7 (several proposal sets scored against each other, with per-side tightening onto the photograph's own edge so white and scalloped borders are left out) are reimplemented in Rust, stage by stage, following the Python code and its `docs/specs/detector-v7.md`.
-- **The benchmark.** OxiCut's `bench` command reproduces ScanSplitter's scoring (rotated-box matching, box quality, F1, count accuracy) and runs on its fixtures, so the two can be compared directly.
-- **The models.** The same MobileSAM ONNX files, from the same pinned Hugging Face revision and with the same checksums.
+*Before you save, look at the finished pictures and turn any that are the wrong way round.*
 
-How closely the port follows the original, and every place it deviates, is written down in [`docs/detector-v7-port.md`](docs/detector-v7-port.md). Because OxiCut is a derivative work it is licensed under the GPL-3.0 as well.
+## What it does
 
-## What is different
+- **Finds the pictures for you.** It also copes with crooked prints, white borders and zigzag edges.
+- **Straightens every picture** and saves it as its own file, at the full quality of your scan.
+- **Lets you check first.** Scans where nothing looks wrong are approved by themselves. The ones that need a look wait for you.
+- **Easy to fix.** Move, resize or turn a frame, add one that was missed, split two pictures that were found as one, or make a crop a little closer or wider. A magnifier follows the corner you are working on.
+- **Turns pictures the right way up.** One click for a sideways or upside-down print.
+- **Keeps your details.** The resolution, colour profile and photo dates of your scan go into every picture.
+- **Saves your work by itself.** Close the window any time and OxiCut opens where you stopped. You can keep several projects and open one by double-clicking it.
+- **Never changes your originals,** and never overwrites a file: a new file with the same name gets "(2)" added.
+- **Works without internet.** The one optional download is a helper file for the most careful way of finding pictures, offered the first time you start it.
 
-**A desktop app, not a local web server.**
-- One native executable (about 36 MB, the ONNX Runtime is built in). No Python, no `uv`, no browser tab, nothing listening on a port.
-- Detection runs on a worker pool and streams progress, so the window stays responsive: 50 scans on the full v7 detector load without the window ever freezing.
+## Download
 
-**No OpenCV.** Everything OpenCV did for ScanSplitter (Lab conversion, Otsu, contours, Canny, Hough lines, warps, resizing) is written in Rust, including the details that change results, such as OpenCV's contour tracing, its interpolation rounding and its Gaussian kernel sizes. The stages were checked against ScanSplitter's own output on its 114 test fixtures: each stage is identical on 110 to 114 of them, and the rest are explained in the port notes.
+The installer is on the [Releases page](https://github.com/oxicut/oxicut/releases). Download `OxiCut-setup.exe` and open it. It works on Windows 10 and 11.
 
-**Close to the original's accuracy.** On ScanSplitter's holdout benchmark (box quality at a 0 px trim) the Rust v7 scores 88.2%, against the 88.8% ScanSplitter publishes for its Python v7.
+This is an early test version and the installer is not signed yet, so Windows may show a blue "Windows protected your PC" window. Choose **More info**, then **Run anyway**.
 
-**A detector that needs no download.** *v7-lite* is new in OxiCut: v3's boxes plus v7's inner-edge tightening, with no model. It is fast, works offline, and is the default; the full v7 is one click away once the models are on disk.
+Progress and plans: [`roadmap.md`](roadmap.md) and [`docs/PROGRESS.md`](docs/PROGRESS.md). Windows only so far.
 
-**Models stay out of the app.** They are downloaded once, from a pinned revision, checked against a SHA-256 and kept in `%APPDATA%\oxicut\models`, shared by the app and the command line. A damaged or truncated file is detected and fetched again. The welcome dialog offers the download (about 45 MB) on first run; until then everything else works.
+## How to use it
 
-**Crops come from the original pixels.** Each crop is sampled straight from the full-resolution scan in one step, in the scan's own bit depth, so a 16-bit TIFF stays 16-bit. Output can be the scan's own format, JPEG, PNG or TIFF.
-
-**The scan's metadata comes along.** Resolution (DPI), colour profile and EXIF are written into the crops in every format, so a 600 dpi scan gives 600 dpi crops. The scan's embedded thumbnail and pixel-size fields are dropped, since they describe the whole scan. Each crop can also say `OxiCut 0.0.1` in its Software field (a separate option, on by default).
-
-**A review workflow built for batches.**
-- Add files, a folder, or drop them on the window; scans are detected as they arrive.
-- Scans with nothing suspicious are approved automatically; the ones flagged (nothing found, touches the scan edge, unusual shape, overlapping boxes) wait for you. `Enter` approves and moves to the next.
-- A **Crops** tab shows the straightened pictures an export will write before anything is saved (with the file names they will get), lets you turn a sideways or upside-down print a quarter turn with one click, and the Export tab lists what each export wrote.
-- Rotatable, resizable boxes on a Fabric.js canvas, with add, split, delete and straighten tools, undo and redo per scan, and Shift to snap rotation to 90 degrees.
-- **Loupes.** A round 4x magnifier follows any resize handle you drag, and while you move or rotate a box, all four of its corners are magnified at once (one loupe in each corner of the view) so you can line up whichever corner you care about.
-- The scan list and the settings panel fold into slim rails that still show what matters: how many scans are approved and how many need review, a thumbnail per scan with its status, the detector and the export format.
-- A Settings dialog (gear icon, or `Ctrl+,`) lets you follow Windows, or always use a light or dark look.
-- Projects save themselves: your scans, boxes and approvals are kept in a `.oxicut` file (a small JSON file in the OxiCut folder in Documents) and the app reopens where you left off. You can keep several projects, rename them, copy a project file to another computer, and open one by double-clicking it. Closing the window only asks while an export is running.
-- Your originals are never modified, and existing files are never overwritten (a new file gets ` (2)` in its name).
-
-## What ScanSplitter has that OxiCut does not (yet)
-
-- PDF input.
-- Automatic 90/180/270 degree orientation (planned; the orientation model is already in the registry).
-- Archival metadata (dates, places, captions), lossless masters and manifests. OxiCut does keep projects now (see above), but front/back pairing for postcards and a manifest are still to come (Phase 5 of the roadmap).
-- Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
-- macOS and Linux (nothing in the stack ties OxiCut to Windows, but it is only built and tested there).
-
-Small differences to expect on the same scan: OxiCut decodes JPEG with a different library than Pillow, so on hard images boxes can differ by a few pixels, and its default trim is 0 px (ScanSplitter's 10 px shrinks every box).
-
-## Using the app
-
-1. **Add** scans (JPEG, PNG or TIFF, 8 or 16 bit) with *Add scans*, *Folder*, or by dropping them on the window.
-2. **Check** the boxes. Drag, resize or rotate any of them; `Enter` approves and moves on.
-3. **Export** the approved scans. Crops go to an `OxiCut output` folder beside each scan, or to a folder you choose, named `{source}-{n}` unless you change the pattern.
+1. **Add** your scans (JPEG, PNG or TIFF) with *Add scans* or *Folder*, or drop them on the window.
+2. **Check** the frames. Drag, resize or turn any of them. Press `Enter` to approve a scan and go to the next one.
+3. **Export** the approved scans. The pictures go into an `OxiCut output` folder beside each scan, or into a folder you choose.
 
 | Keys | |
 |---|---|
 | `Enter` | approve and go to the next scan |
 | `←` `→` / `↑` `↓` | previous / next scan |
-| `Delete` | delete the selected box |
+| `Delete` | delete the selected frame |
 | `Ctrl+Z`, `Ctrl+Y` (or `Ctrl+Shift+Z`) | undo, redo for the open scan |
-| `Shift` while rotating | snap to 90 degrees |
-| scroll, drag the background | zoom, pan |
+| `Shift` while turning | snap to a quarter turn |
+| scroll, drag the background | zoom, move around |
 | `Ctrl+B`, `Ctrl+Shift+B` | fold the scan list, the settings panel |
+| `Ctrl+,` | settings |
 
 [`docs/TESTING.md`](docs/TESTING.md) is a longer walk through everything worth trying, and what is known to be missing.
+
+## What is not there yet
+
+- PDF files as input.
+- Turning pictures the right way up automatically (one click by hand works now).
+- Pairing the front and back of postcards, and notes such as dates, places and captions.
+- macOS and Linux.
+
+## Based on ScanSplitter
+
+OxiCut is a branch of [ScanSplitter](https://github.com/Madnex/ScanSplitter) by Madnex (GPL-3.0), version 0.8.0 (the checkout it was ported from is commit `b435ebb`). ScanSplitter is a Python and OpenCV tool with a web interface; its detection is what OxiCut builds on.
+
+OxiCut is a derivative work, so it is licensed under the GPL-3.0 as well.
+
+## For developers: how it differs from ScanSplitter
+
+**What is taken over**
+- **The detectors.** ScanSplitter's v3 (colour and edge based), v5 (MobileSAM anchors with texture and frame passes) and v7 (several proposal sets scored against each other, with per-side tightening onto the photograph's own edge so white and scalloped borders are left out) are reimplemented in Rust, stage by stage, following the Python code and its `docs/specs/detector-v7.md`.
+- **The benchmark.** OxiCut's `bench` command reproduces ScanSplitter's scoring (rotated-box matching, box quality, F1, count accuracy) and runs on its fixtures, so the two can be compared directly.
+- **The models.** The same MobileSAM ONNX files, from the same pinned Hugging Face revision and with the same checksums.
+
+How closely the port follows the original, and every place it deviates, is written down in [`docs/detector-v7-port.md`](docs/detector-v7-port.md).
+
+**What is different**
+- **A desktop app, not a local web server.** One native executable (about 36 MB, the ONNX Runtime is built in). No Python, no `uv`, no browser tab, nothing listening on a port. Detection runs on a worker pool and streams progress, so the window stays responsive: 50 scans on the full v7 detector load without the window ever freezing.
+- **No OpenCV.** Everything OpenCV did for ScanSplitter (Lab conversion, Otsu, contours, Canny, Hough lines, warps, resizing) is written in Rust, including the details that change results, such as OpenCV's contour tracing, its interpolation rounding and its Gaussian kernel sizes. The stages were checked against ScanSplitter's own output on its 114 test fixtures: each stage is identical on 110 to 114 of them, and the rest are explained in the port notes.
+- **Close to the original's accuracy.** On ScanSplitter's holdout benchmark (box quality at a 0 px trim) the Rust v7 scores 88.2%, against the 88.8% ScanSplitter publishes for its Python v7.
+- **A detector that needs no download.** *v7-lite* is new in OxiCut: v3's boxes plus v7's inner-edge tightening, with no model. It is fast, works offline, and is the default; the full v7 is one click away once the models are on disk.
+- **Models stay out of the app.** They are downloaded once, from a pinned revision, checked against a SHA-256 and kept in `%APPDATA%\oxicut\models`, shared by the app and the command line. A damaged or truncated file is detected and fetched again. The welcome dialog offers the download (about 45 MB) on first run; until then everything else works.
+- **Crops come from the original pixels.** Each crop is sampled straight from the full-resolution scan in one step, in the scan's own bit depth, so a 16-bit TIFF stays 16-bit. Output can be the scan's own format, JPEG, PNG or TIFF.
+- **The scan's metadata comes along.** Resolution (DPI), colour profile and EXIF are written into the crops in every format, so a 600 dpi scan gives 600 dpi crops. The scan's embedded thumbnail and pixel-size fields are dropped, since they describe the whole scan. Each crop can also say `OxiCut 0.0.1` in its Software field (a separate option, on by default).
+- **A review workflow built for batches.** Scans with nothing suspicious are approved automatically; the ones flagged (nothing found, touches the scan edge, unusual shape, overlapping boxes) wait for you. Rotatable, resizable boxes on a Fabric.js canvas, undo and redo per scan, loupes on every handle and, while a box is moved or rotated, in all four of its corners. Projects are `.oxicut` files (small JSON files in the OxiCut folder in Documents).
+
+**What ScanSplitter has that OxiCut does not (yet)**
+- PDF input, automatic 90/180/270 degree orientation (planned; the orientation model is already in the registry), archival metadata and manifests (front/back pairing is Phase 5 of the roadmap), Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
+- Small differences to expect on the same scan: OxiCut decodes JPEG with a different library than Pillow, so on hard images boxes can differ by a few pixels, and its default trim is 0 px (ScanSplitter's 10 px shrinks every box).
 
 ## Command line
 
@@ -95,11 +109,7 @@ npm install
 cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 ```
 
-`cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests.
-
-## Download
-
-The installer is on the [Releases page](https://github.com/oxicut/oxicut/releases). It is a test version and is not signed yet, so Windows may ask you to choose "More info" and "Run anyway".
+`cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests. A release is built by the GitHub workflow in `.github/workflows/release.yml`; see [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Project page
 
