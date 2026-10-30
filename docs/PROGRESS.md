@@ -169,3 +169,19 @@ The rules: one scan of fronts to one scan of backs, a scan is fronts or backs bu
 Export: a pair of scans goes out together (*Export this scan* on either one; *Export all approved* leaves a scan out until its partner is approved too). The front keeps its usual name plus `-front`, the back gets the front's name plus `-back`, and the back is saved in the front's output folder. The engine got `ScanExport::write_named`, the app's `ExportItem` got optional `names` and `folderOf`, and `final_crop` takes the name so the larger view cuts the file an export would write. Projects keep the link and the pairs (`backsOn`, `pairs` as positions in the two box lists, since box ids are made fresh on open); older files open unpaired.
 
 Checked in the app with a scan and a mirrored copy as its backs: matched, named, closed and reopened with the pairs intact, exported into one folder (`cards-1-front`, `cards-1-back`, ...).
+
+## Fabric.js 7 and a quiet npm install (2026-10-30)
+
+`npm ci` printed ten deprecation warnings and `npm audit` reported three vulnerabilities (a critical one in `tar`, a high one in Fabric itself: two SVG-export XSS advisories). All of it came from Fabric 6.7.1 and its Node-only optional packages (`jsdom 20`, `canvas 2`), which the browser app never loads. Fabric is now 7.4.0, the release with the fixes.
+
+Fabric 7 changed little for OxiCut, which uses it in one file (`ReviewCanvas.vue`): the origin default is now `center`, but the boxes and the picture set theirs explicitly, and `preserveObjectStacking` was already on. The one real difference is that right and middle mouse buttons now reach `mouse:down` and `mouse:up`, so the pan code ignores any button but the main one.
+
+Fabric 7.4.0 still pulls two deprecated packages through its optional `jsdom 26` and `canvas 3` (`whatwg-encoding` and `prebuild-install`), so `package.json` has an `overrides` block: `jsdom` at 28 (no deprecated dependencies) and `canvas` pointed at `@napi-rs/canvas` (prebuilt, no install script). Neither is loaded by the app or the tests; they only exist because Fabric lists them as optional. `npm ci` is now silent and `npm audit` finds nothing. If a later Fabric release stops needing them, the overrides can go.
+
+Checked in the built app: boxes in the right places, move, resize, rotate with the four corner magnifiers, zoom with the wheel, pan by dragging the background, clicking away to deselect, and right and middle clicks doing nothing.
+
+## Tests split by side (2026-10-30)
+
+The `Tests` workflow is now three jobs. **`changes`** lists the files a pull request (or a push to `main`) touched and says whether any of them is Rust-related: `crates/`, `app/src-tauri/`, `benchmarks/`, `Cargo.toml`, `Cargo.lock` or the workflow itself. If it cannot tell, it says yes. **`web`** (Linux, always) installs the packages, runs the type check and build, then the tests. **`rust`** (Windows, only when `changes` said yes) runs clippy with warnings denied, a build and the tests. A pull request that only touches the interface, the npm packages or the docs therefore skips the Rust job, and a skipped job counts as passing, so it can still be merged. The checks are now called `web` and `rust` (they were `tests`), so a branch rule that requires the old name has to be changed. The workflow can also be started by hand from the Actions tab, which tests everything.
+
+No `cargo fmt --check` yet: the code has never been run through rustfmt, so it would fail until a one-off `cargo fmt` is committed.

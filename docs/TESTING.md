@@ -57,6 +57,10 @@ Scan the fronts of some postcards, then turn the stack over and scan the backs. 
 - *Export this scan* on either scan saves both scans together, into the fronts' `OxiCut output` folder (or the folder chosen in the Export tab), and *Export all approved* leaves a pair out while the other scan is not approved, and says so;
 - close the app and open it again: the pairs are still there; delete one crop and press Undo: its pair comes back.
 
+## Automatic tests
+
+Every pull request runs the `web` check (type check, build, tests). The `rust` check (clippy, build, tests) only runs when a Rust-related file changed, so for a change that only touches the interface or the npm packages it shows as skipped, which is fine. Running the workflow by hand from the Actions tab tests everything.
+
 ## Known gaps
 
 - v7-lite is only part of ScanSplitter's v7 (no models): it finds the same number of prints as v3. The full v7 is much better at counting them, but a whole album page can still come out as one box, as in ScanSplitter.
