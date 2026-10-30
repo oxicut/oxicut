@@ -518,10 +518,12 @@ onMounted(() => {
     event.stopPropagation();
   });
 
-  // Drag empty space (or hold Alt) to pan.
+  // Drag empty space (or hold Alt) to pan. Only the main button counts: since Fabric 7 the right and
+  // middle buttons are reported too, and they must do nothing here.
   let panning = false;
   canvas.on("mouse:down", (opt) => {
     const event = opt.e as MouseEvent;
+    if (event.button !== 0) return;
     if (!opt.target || !ids.has(opt.target) || event.altKey) {
       panning = true;
       canvas!.setCursor("grabbing");
@@ -532,7 +534,8 @@ onMounted(() => {
     fitted = false;
     canvas!.relativePan(new Point((opt.e as MouseEvent).movementX, (opt.e as MouseEvent).movementY));
   });
-  canvas.on("mouse:up", () => {
+  canvas.on("mouse:up", (opt) => {
+    if ((opt.e as MouseEvent).button !== 0) return;
     panning = false;
     hideLoupe();
     transforming = false;
