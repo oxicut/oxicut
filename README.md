@@ -28,7 +28,7 @@ The installer is on the [Releases page](https://github.com/oxicut/oxicut/release
 
 This is an early test version and the installer is not signed yet, so Windows may show a blue "Windows protected your PC" window. Choose **More info**, then **Run anyway**.
 
-Progress and plans: [`roadmap.md`](roadmap.md) and [`docs/PROGRESS.md`](docs/PROGRESS.md). Windows only so far.
+More about OxiCut, in plain words: [oxicut.github.io](https://oxicut.github.io). Progress and plans: [`roadmap.md`](roadmap.md) and [`docs/PROGRESS.md`](docs/PROGRESS.md). Windows only so far.
 
 ## How to use it
 
@@ -110,10 +110,6 @@ cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 ```
 
 `cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests. A release is built by the GitHub workflow in `.github/workflows/release.yml`; see [`docs/TESTING.md`](docs/TESTING.md).
-
-## Project page
-
-https://github.com/oxicut/oxicut (the address the app itself links to from its About window).
 
 ## Credits and license
 
