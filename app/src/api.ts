@@ -154,8 +154,8 @@ export interface FinalCrop {
   shownAsCopy: boolean;
 }
 
-export const finalCrop = (path: string, region: Box, number: number, options: ExportOptions) =>
-  invoke<FinalCrop>("final_crop", { path, region, number, options });
+export const finalCrop = (path: string, region: Box, number: number, name: string | null, options: ExportOptions) =>
+  invoke<FinalCrop>("final_crop", { path, region, number, name, options });
 
 export const getCrops = (path: string, scanWidth: number, boxes: Box[], side: number) =>
   invoke<CropImage[]>("get_crops", { path, scanWidth, boxes, side });
@@ -163,8 +163,18 @@ export const getPreview = (path: string) => invoke<string>("get_preview", { path
 export const evaluateFlags = (boxes: IdBox[], width: number, height: number) =>
   invoke<Flag[]>("evaluate_flags", { boxes, width, height });
 
+/** One scan to export. */
+export interface ExportItem {
+  path: string;
+  boxes: Box[];
+  /** A file name (without extension) for each box; `null` lets the naming pattern decide. */
+  names: (string | null)[];
+  /** A scan whose output folder to use: the backs of a pair go next to their fronts. */
+  folderOf: string | null;
+}
+
 export const exportScans = (
-  items: { path: string; boxes: Box[] }[],
+  items: ExportItem[],
   options: ExportOptions,
   onEvent: (e: ExportEvent) => void,
 ) => invoke<ExportSummary>("export_scans", { items, options, onEvent: channel(onEvent) });
@@ -184,6 +194,10 @@ export interface ScanRecord {
   exportedKey: string | null;
   /** The files the last export wrote for this scan. */
   exportedFiles: string[];
+  /** The scan holding the backs of this scan's pictures, when this is a scan of fronts. */
+  backsOn?: number | null;
+  /** Which picture goes with which on `backsOn`: positions in the two lists of boxes (front, back). */
+  pairs?: [number, number][];
   error: string | null;
 }
 

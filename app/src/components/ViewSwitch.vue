@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { cropCount, state } from "../store";
+import { computed } from "vue";
+import { selectedScan, state } from "../store";
+
+/** The crops the Crops view lists: this scan's, or every scan's when it is set to All scans. */
+const count = computed(() =>
+  state.cropsScope === "all" ? state.scans.reduce((sum, s) => sum + s.boxes.length, 0) : (selectedScan.value?.boxes.length ?? 0),
+);
 </script>
 
 <template>
@@ -11,7 +17,7 @@ import { cropCount, state } from "../store";
       title="Preview the cut-out, straightened pictures before you export them"
       @click="state.view = 'crops'"
     >
-      Crops <span class="count">{{ cropCount }}</span>
+      Crops <span v-if="state.cropsScope === 'all' || selectedScan" class="count">{{ count }}</span>
     </button>
   </div>
 </template>

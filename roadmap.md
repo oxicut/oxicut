@@ -132,8 +132,8 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 ## Phase 5: Projects, pairing, export
 
 - [x] Project persistence: a project is one `.oxicut` file (JSON) in `Documents\OxiCut` holding the scan list, boxes, approvals and export marks, saved a second after every change. The app reopens the last project on start, with a "Create new project" button under the scan list and a Projects dialog to switch, rename and open files, and moved projects find their scans through relative paths. Double-clicking a project opens it in the running window (single instance); the Windows association comes with the installer, see Phase 7. _(Per-crop filename and caption are not stored yet; they come with pairing.)_
-- [ ] **Front/back pairing**: link a crop on one scan to a crop on another; export as `{name}-front` / `{name}-back`.
-- [ ] "Auto-pair" helper: match by order across consecutive scans, user confirms.
+- [x] **Front/back pairing**: a scan of fronts is linked to the scan of its backs (Crops view, *Backs are on another scan…*); each picture gets its back, changeable by hand; the pair is exported as `{name}-front` / `{name}-back` into the fronts' folder, and saved in the project. A pair of scans is exported together. The workflow is deliberately simple: scan the fronts, turn the stack over, scan the backs, link; there is no per-crop linking and no backs spread over several scans.
+- [x] "Auto-pair" helper: pictures are matched by position, mirrored left to right or top to bottom (whichever fits), and the user can change any pair.
 - [x] Export approved crops only, format per settings: the **Crops view** (straightened pictures of every box with their file names, turn left or right, remove, larger view, "Export this scan"), and the Export tab lists what each export wrote. Re-export still adds " (2)" copies.
 - [ ] Optional JSON/CSV manifest of what was exported.
 - [ ] **Done when:** a 20-postcard project round-trips (close app, reopen, export pairs).

@@ -1,7 +1,7 @@
 // The app's state and the actions on it. Components read `state` and call these.
 
 import { computed, reactive, watch } from "vue";
-import { fromRecord, nextIdAfter, projectKey, toProjectFile, type RestoredStatus, type SavedScan } from "./projectRecord";
+import { fromRecord, nextIdAfter, pairsFromPositions, projectKey, toProjectFile, type RestoredStatus, type SavedScan } from "./projectRecord";
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
@@ -9,6 +9,7 @@ import { applyTheme } from "./appearance";
 import { resizeBox, type SizeChange } from "./cropSize";
 import { turnBox } from "./cropTurn";
 import { History, sameBoxes } from "./history";
+import { activePairs, matchBacks, planCrops, withPair, withoutPair, type CropPlan, type Pair } from "./pairing";
 import { parseTheme } from "./theme";
 
 export type ScanStatus = "queued" | "detecting" | "pending" | "flagged" | "approved" | "error";
@@ -38,6 +39,10 @@ export interface ScanItem {
   exportedKey: string | null;
   /** The files the last export wrote for this scan (saved with the project). */
   exportedFiles: string[];
+  /** The scan holding the backs of this scan's pictures, when this is a scan of fronts (saved with the project). */
+  backsOn: number | null;
+  /** Which picture on this scan goes with which on `backsOn` (box ids; saved as positions). */
+  pairs: Pair[];
   /** What the last export of this scan cost in this session: milliseconds, and the size of each file. Not saved. */
   exportStats: { millis: number; sizes: number[] } | null;
   /** The scan file could not be found when the project was opened (moved or deleted). Not saved. */
@@ -103,8 +108,6 @@ export const pendingCount = computed(() => state.scans.filter((s) => s.status ==
 /** What closing the window now would throw away. */
 export const closeAssessment = computed(() => assessClose(state.scans, state.exporting.active));
 const canExport = (s: ScanItem) => s.status === "approved" && s.boxes.length > 0 && !s.missing;
-/** Crops that the Crops view lists, over every scan. */
-export const cropCount = computed(() => state.scans.reduce((sum, s) => sum + s.boxes.length, 0));
 export const exportableCount = computed(() => state.scans.filter(canExport).length);
 
 let nextScanId = 1;
@@ -201,6 +204,7 @@ function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis) {
   scan.detectedKey = boxesKey(scan.boxes);
   scan.error = null;
   scan.revision++;
+  refreshPairs(scan);
   return settleDetected(scan);
 }
 
@@ -291,6 +295,8 @@ function makeScan(path: string): ScanItem {
     detectedKey: "",
     exportedKey: null,
     exportedFiles: [],
+    backsOn: null,
+    pairs: [],
     exportStats: null,
     missing: false,
   };
@@ -450,8 +456,87 @@ export function removeScan(scan: ScanItem) {
   const index = state.scans.findIndex((s) => s.id === scan.id);
   if (index < 0) return;
   state.scans.splice(index, 1);
+  for (const other of state.scans) if (other.backsOn === scan.id) unlinkBacks(other);
   if (state.selectedId === scan.id) {
     state.selectedId = (state.scans[index] ?? state.scans[index - 1])?.id ?? null;
+  }
+}
+
+// ------------------------------------------------------------ fronts and backs
+// A scan of the fronts of a stack of prints can be linked to the scan of the same stack turned over.
+// Pictures are matched by where they lie (see pairing.ts); the user can change any pair.
+
+/** What every picture of `scan` will be called when exported, and which one is its partner. */
+export function cropPlansFor(scan: ScanItem): CropPlan[] {
+  return planCrops(state.scans, scan, { pattern: state.settings.pattern, format: state.settings.format });
+}
+
+/** The scan of fronts `scan` is the backs of, if it is. */
+export const frontsOf = (scan: ScanItem): ScanItem | undefined => state.scans.find((s) => s.backsOn === scan.id);
+/** The scan holding the backs of `scan`, if it has been linked to one. */
+export const backsOf = (scan: ScanItem): ScanItem | undefined =>
+  scan.backsOn === null ? undefined : state.scans.find((s) => s.id === scan.backsOn);
+
+/** The other scan of a linked pair of scans: the backs for a scan of fronts, the fronts for a scan of backs. */
+export const partnerOf = (scan: ScanItem): ScanItem | undefined => backsOf(scan) ?? frontsOf(scan);
+
+/** Pairs that are in use now (both pictures still there). */
+export function pairsOf(scan: ScanItem): Pair[] {
+  const backs = backsOf(scan);
+  return backs ? activePairs(scan.pairs, scan.boxes, backs.boxes) : [];
+}
+
+/** Why `backs` cannot be the backs of `front`, in plain words; `null` when it can. */
+export function whyNotBacks(front: ScanItem, backs: ScanItem): string | null {
+  if (front.id === backs.id) return "A scan cannot hold its own backs.";
+  const fronts = frontsOf(front);
+  if (fronts) return `${front.name} is already the backs of ${fronts.name}.`;
+  if (backs.backsOn !== null) return `${backs.name} holds fronts of its own, with the backs on another scan.`;
+  return null;
+}
+
+/** Say that the pictures of `backs` are the backs of the pictures of `front`, and match them up. */
+export function linkBacks(front: ScanItem, backs: ScanItem): boolean {
+  const problem = whyNotBacks(front, backs);
+  if (problem) {
+    say(problem);
+    return false;
+  }
+  // A scan of backs belongs to one scan of fronts.
+  for (const other of state.scans) if (other.id !== front.id && other.backsOn === backs.id) unlinkBacks(other);
+  front.backsOn = backs.id;
+  front.pairs = matchBacks(front, backs);
+  say(
+    front.pairs.length
+      ? `Matched ${front.pairs.length} picture${front.pairs.length === 1 ? "" : "s"} with their backs. Check them in the Crops view.`
+      : "Nothing could be matched yet: one of the two scans has no pictures.",
+  );
+  return true;
+}
+
+/** Stop treating `front`'s scan as having backs on another scan. */
+export function unlinkBacks(front: ScanItem) {
+  front.backsOn = null;
+  front.pairs = [];
+}
+
+/** Match the pictures again from scratch, dropping every change made by hand. */
+export function matchAgain(front: ScanItem) {
+  const backs = backsOf(front);
+  if (backs) front.pairs = matchBacks(front, backs);
+}
+
+/** Give a picture on a scan of fronts the back `backBoxId` (`null`: no back). A back taken from another picture is moved. */
+export function setBack(front: ScanItem, frontBoxId: number, backBoxId: number | null) {
+  front.pairs = backBoxId === null ? withoutPair(front.pairs, frontBoxId) : withPair(front.pairs, frontBoxId, backBoxId);
+}
+
+/** After detection replaced the boxes of `scan`: a linked pair of scans that lost all its pairs is matched again. */
+function refreshPairs(scan: ScanItem) {
+  const linked = [scan, ...state.scans.filter((s) => s.backsOn === scan.id)];
+  for (const front of linked) {
+    const backs = backsOf(front);
+    if (backs && activePairs(front.pairs, front.boxes, backs.boxes).length === 0) front.pairs = matchBacks(front, backs);
   }
 }
 
@@ -497,9 +582,25 @@ export function exportOptions(): api.ExportOptions {
 /** Export every approved scan; `true` when all of them were written. */
 export async function exportApproved(): Promise<boolean> {
   if (state.exporting.active) return false;
-  const items = state.scans.filter(canExport);
+  const ready = state.scans.filter(canExport);
+  // Fronts and backs go out together: a scan waits until the scan it is paired with is approved too.
+  const waiting = ready.filter((s) => {
+    const other = partnerOf(s);
+    return other && !canExport(other);
+  });
+  const items = ready.filter((s) => !waiting.includes(s));
+  if (waiting.length) {
+    const other = partnerOf(waiting[0]!)!;
+    const left = waiting.length === 1 ? "One scan was" : `${waiting.length} scans were`;
+    say(
+      items.length
+        ? `${left} left out: ${other.name} still needs to be approved, because the fronts and backs are saved together.`
+        : `Approve ${other.name} too: the fronts and backs are saved together.`,
+      12000,
+    );
+  }
   if (!items.length) {
-    say("Nothing to export yet: approve at least one scan that has boxes.");
+    if (!waiting.length) say("Nothing to export yet: approve at least one scan that has boxes.");
     return false;
   }
   return runExport(items);
@@ -512,7 +613,22 @@ export async function exportScan(scan: ScanItem): Promise<boolean> {
     say(scan.missing ? "This scan could not be found, so it cannot be exported." : "This scan has no boxes to export.");
     return false;
   }
-  return runExport([scan]);
+  // A scan of fronts and the scan of its backs are saved together, so each pair gets the same names.
+  const other = partnerOf(scan);
+  const group = other && !other.missing && other.boxes.length > 0 ? [scan, other] : [scan];
+  return runExport(group);
+}
+
+/** What each scan is sent to the export as: its boxes, the names pairs chose, and where backs go. */
+function exportItem(scan: ScanItem): api.ExportItem {
+  const plans = cropPlansFor(scan);
+  const front = frontsOf(scan);
+  return {
+    path: scan.path,
+    boxes: scan.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })),
+    names: plans.map((p) => p.chosenName),
+    folderOf: front && plans.some((p) => p.role === "back") ? front.path : null,
+  };
 }
 
 async function runExport(items: ScanItem[]): Promise<boolean> {
@@ -523,7 +639,7 @@ async function runExport(items: ScanItem[]): Promise<boolean> {
   let complete = false;
   try {
     const summary = await api.exportScans(
-      items.map((s) => ({ path: s.path, boxes: s.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })) })),
+      items.map(exportItem),
       exportOptions(),
       (event) => {
         if (event.event === "finished") {
@@ -651,9 +767,10 @@ export function forgetProject(path: string) {
   state.settings.recentProjects = state.settings.recentProjects.filter((p) => p.path.toLowerCase() !== path.toLowerCase());
 }
 
-function restoreScan(saved: SavedScan & { status: RestoredStatus }, missing: boolean): ScanItem {
+function restoreScan(saved: SavedScan & { status: RestoredStatus; pairPositions?: [number, number][] }, missing: boolean): ScanItem {
+  const { pairPositions: _positions, ...rest } = saved;
   return {
-    ...saved,
+    ...rest,
     boxes: saved.boxes.map(withId),
     thumbnail: null,
     flags: [],
@@ -714,7 +831,19 @@ export async function openProject(path: string): Promise<boolean> {
     const missing = new Set(opened.missing);
     nextScanId = nextIdAfter(opened.project.scans);
     state.project = { path: opened.path, name: opened.name, created: opened.project.created };
-    state.scans = opened.project.scans.map((r) => restoreScan(fromRecord(r), missing.has(r.id)));
+    const restored = opened.project.scans.map((r) => fromRecord(r));
+    state.scans = restored.map((r) => restoreScan(r, missing.has(r.id)));
+    // Pairs are saved as positions in the box lists; now that every box has its id they can be rebuilt.
+    for (const [index, saved] of restored.entries()) {
+      const front = state.scans[index];
+      if (!front) continue;
+      const backs = saved.backsOn === null ? undefined : state.scans.find((s) => s.id === saved.backsOn);
+      if (!backs || backs.id === front.id) {
+        front.backsOn = null;
+        continue;
+      }
+      front.pairs = pairsFromPositions(saved.pairPositions, front.boxes, backs.boxes);
+    }
     state.selectedId = state.scans[0]?.id ?? null;
     lastSaved = projectJson.value;
     rememberProject();

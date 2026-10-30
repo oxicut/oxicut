@@ -2,9 +2,26 @@
 import { computed, ref, watch } from "vue";
 import * as api from "../api";
 import { boxesKey } from "../closeGuard";
-import { baseName, cropFileName } from "../cropNames";
-import { exportApproved, exportScan, exportableCount, removeCrop, say, selectedScan, state, turnCrop } from "../store";
+import { baseName } from "../cropNames";
+import {
+  backsOf,
+  cropPlansFor,
+  exportApproved,
+  exportScan,
+  exportableCount,
+  frontsOf,
+  matchAgain,
+  removeCrop,
+  say,
+  selectScan,
+  selectedScan,
+  setBack,
+  state,
+  turnCrop,
+  unlinkBacks,
+} from "../store";
 import type { BoxItem, ScanItem } from "../store";
+import BacksChooser from "./BacksChooser.vue";
 import CropLightbox from "./CropLightbox.vue";
 import ViewSwitch from "./ViewSwitch.vue";
 import type { LightboxItem } from "./CropLightbox.vue";
@@ -37,21 +54,49 @@ async function fetchCrops(scan: ScanItem) {
     loading.delete(scan.id);
   }
   // The boxes may have changed while this was being made.
-  if (scans.value.includes(scan) && loaded.value[scan.id]?.key !== scanKey(scan)) void fetchCrops(scan);
+  if (wanted.value.includes(scan) && loaded.value[scan.id]?.key !== scanKey(scan)) void fetchCrops(scan);
 }
+
+/** The scans to cut pictures for: the ones listed, and the scan of backs beside a scan of fronts. */
+const wanted = computed<ScanItem[]>(() => {
+  const all = new Set<ScanItem>(scans.value);
+  for (const scan of scans.value) {
+    const backs = backsOf(scan);
+    if (backs) all.add(backs);
+  }
+  return [...all];
+});
 
 // Cut the pictures for whatever is listed, a scan at a time; the cards show a spinner until theirs arrive.
 watch(
-  () => scans.value.map((s) => `${s.id}:${scanKey(s)}`).join("|"),
+  () => wanted.value.map((s) => `${s.id}:${scanKey(s)}`).join("|"),
   async () => {
-    for (const scan of scans.value) await fetchCrops(scan);
+    for (const scan of wanted.value) await fetchCrops(scan);
   },
   { immediate: true },
 );
 
+/** The back that goes with a front, as a card shows it. */
+interface Partner {
+  scan: ScanItem;
+  boxId: number;
+  name: string;
+  picture: string | null;
+}
+
 interface Card extends LightboxItem {
   picture: string | null;
   exported: boolean;
+  role: "front" | "back" | null;
+  /** For a front: its back. For a back: its front. */
+  partner: Partner | null;
+}
+
+/** The picture of one box of another scan, if it has been cut. */
+function pictureOf(scan: ScanItem, boxId: number): string | null {
+  const entry = loaded.value[scan.id];
+  if (entry?.key !== scanKey(scan)) return null;
+  return entry.crops[scan.boxes.findIndex((b) => b.id === boxId)]?.dataUrl || null;
 }
 
 const cards = computed<Card[]>(() =>
@@ -59,8 +104,21 @@ const cards = computed<Card[]>(() =>
     const entry = loaded.value[scan.id];
     const fresh = entry?.key === scanKey(scan);
     const exported = scan.exportedKey !== null && scan.exportedKey === boxesKey(scan.boxes);
+    const plans = cropPlansFor(scan);
     return scan.boxes.map((box, index) => {
-      const planned = cropFileName(state.settings.pattern, scan.name, index + 1, state.settings.format);
+      const plan = plans[index]!;
+      const planned = plan.fileName;
+      const partnerScan = plan.partner ? (backsOf(scan) ?? frontsOf(scan)) : undefined;
+      const partnerIndex = partnerScan && plan.partner ? partnerScan.boxes.findIndex((b) => b.id === plan.partner!.boxId) : -1;
+      const partner =
+        partnerScan && plan.partner && partnerIndex >= 0
+          ? {
+              scan: partnerScan,
+              boxId: plan.partner.boxId,
+              name: cropPlansFor(partnerScan)[partnerIndex]?.fileName ?? "",
+              picture: pictureOf(partnerScan, plan.partner.boxId),
+            }
+          : null;
       // Once exported, say what was really written.
       const written = exported && scan.exportedFiles.length === scan.boxes.length ? baseName(scan.exportedFiles[index]) : null;
       const crop = fresh ? entry.crops[index] : undefined;
@@ -69,6 +127,9 @@ const cards = computed<Card[]>(() =>
         box,
         index,
         name: written ?? planned,
+        chosenName: plan.chosenName,
+        role: plan.role,
+        partner,
         width: Math.round(box.w),
         height: Math.round(box.h),
         picture: crop?.dataUrl || null,
@@ -83,6 +144,31 @@ const lightbox = ref<number | null>(null);
 const formatLabel = computed(() => ({ same: "the scan's own format", jpg: "JPEG", png: "PNG", tiff: "TIFF" })[state.settings.format]);
 const where = computed(() => state.settings.outputDir || "an “OxiCut output” folder beside each scan");
 const busy = computed(() => state.exporting.active);
+
+// ---- fronts and backs
+const choosing = ref(false);
+/** The scan of fronts this view is about, when the selected scan is one. */
+const asFront = computed(() => (state.cropsScope === "scan" && selectedScan.value ? selectedScan.value : null));
+const backsScan = computed(() => (asFront.value ? backsOf(asFront.value) : undefined));
+const frontsScan = computed(() => (asFront.value ? frontsOf(asFront.value) : undefined));
+
+/** The pictures on the scan of backs that could be this front's back, for the "Back" menu. */
+function backChoices(card: Card) {
+  const backs = backsOf(card.scan);
+  if (!backs) return [];
+  const plans = cropPlansFor(backs);
+  return backs.boxes.map((box, index) => ({ id: box.id, label: `Picture ${index + 1}${plans[index]?.partner && plans[index]!.partner!.boxId !== card.box.id ? " (has a front)" : ""}` }));
+}
+
+function chooseBack(card: Card, value: string) {
+  setBack(card.scan, card.box.id, value === "" ? null : Number(value));
+}
+
+function notAPair(card: Card) {
+  const front = card.role === "front" ? card.scan : card.partner?.scan;
+  const frontBox = card.role === "front" ? card.box.id : card.partner?.boxId;
+  if (front && frontBox !== undefined) setBack(front, frontBox, null);
+}
 
 function showInFolder(card: Card) {
   const file = card.exported ? card.scan.exportedFiles[card.index] : undefined;
@@ -104,6 +190,28 @@ function showInFolder(card: Card) {
       </span>
     </header>
 
+    <div v-if="asFront" class="pairrow">
+        <template v-if="asFront && backsScan">
+          <span class="muted pairing">The backs are on {{ backsScan.name }}</span>
+          <button class="btn tiny" title="Look at the scan of the backs" @click="selectScan(backsScan.id)">Show backs</button>
+          <button class="btn tiny" title="Match the fronts and backs again from the start" @click="matchAgain(asFront)">Match again</button>
+          <button class="btn tiny" title="The pictures are saved on their own again, as before" @click="unlinkBacks(asFront)">Stop pairing</button>
+        </template>
+        <template v-else-if="asFront && frontsScan">
+          <span class="muted pairing">These are the backs of {{ frontsScan.name }}</span>
+          <button class="btn tiny" title="Look at the scan of the fronts" @click="selectScan(frontsScan.id)">Show fronts</button>
+        </template>
+        <button
+          v-else-if="asFront"
+          class="btn tiny"
+          :disabled="state.scans.length < 2"
+          :title="state.scans.length < 2 ? 'Add the scan of the backs first' : 'Pair each picture here with its back on another scan'"
+          @click="choosing = true"
+        >
+          Backs are on another scan…
+        </button>
+    </div>
+
     <div class="scroll">
       <p v-if="!cards.length" class="empty muted">
         {{ state.cropsScope === "scan" ? "There are no boxes on this scan, so nothing will be cut out." : "No scan has any boxes yet." }}
@@ -120,7 +228,24 @@ function showInFolder(card: Card) {
             <strong class="name" :title="card.name">{{ card.name }}</strong>
             <span v-if="state.cropsScope === 'all'" class="muted small" :title="card.scan.path">from {{ card.scan.name }}</span>
             <span class="muted small">{{ card.width }} × {{ card.height }} px</span>
+            <span v-if="card.role" class="chip accent">{{ card.role === "front" ? "Front" : "Back" }}</span>
             <span v-if="card.exported" class="chip ok">Exported</span>
+          </div>
+          <div v-if="card.role === 'front'" class="partner">
+            <img v-if="card.partner?.picture" :src="card.partner.picture" alt="" />
+            <span v-else class="blank" aria-hidden="true"></span>
+            <label class="which">
+              <span class="muted small">Its back</span>
+              <select :value="card.partner?.boxId ?? ''" @change="chooseBack(card, ($event.target as HTMLSelectElement).value)">
+                <option v-if="!card.partner" value="">No back</option>
+                <option v-for="choice in backChoices(card)" :key="choice.id" :value="choice.id">{{ choice.label }}</option>
+              </select>
+            </label>
+          </div>
+          <div v-else-if="card.role === 'back'" class="partner">
+            <img v-if="card.partner?.picture" :src="card.partner.picture" alt="" />
+            <span v-else class="blank" aria-hidden="true"></span>
+            <span class="muted small">Back of {{ card.partner?.name }}</span>
           </div>
           <div class="actions">
             <button class="btn tiny" title="Turn this crop a quarter turn to the left" @click="turnCrop(card.scan, card.box.id, 'left')">
@@ -135,6 +260,7 @@ function showInFolder(card: Card) {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
               Remove
             </button>
+            <button v-if="card.role" class="btn tiny" title="This picture and its partner are saved on their own again" @click="notAPair(card)">Not a pair</button>
             <button v-if="card.exported" class="btn tiny" title="Show the written file in its folder" @click="showInFolder(card)">Show file</button>
           </div>
         </li>
@@ -152,6 +278,7 @@ function showInFolder(card: Card) {
       </button>
     </footer>
 
+    <BacksChooser v-if="choosing && asFront" :front="asFront" @close="choosing = false" />
     <CropLightbox v-if="lightbox !== null" v-model:index="lightbox" :items="cards" @close="lightbox = null" />
   </section>
 </template>
@@ -282,6 +409,46 @@ function showInFolder(card: Card) {
 .small {
   font-size: 12px;
 }
+.pairrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.pairing {
+  font-size: 12px;
+}
+.seg {
+  white-space: nowrap;
+}
+.partner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  background: var(--surface-2);
+  border-radius: 6px;
+}
+.partner img,
+.partner .blank {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  background: var(--stage);
+  border-radius: 4px;
+}
+.which {
+  display: grid;
+  min-width: 0;
+}
+.which select {
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
