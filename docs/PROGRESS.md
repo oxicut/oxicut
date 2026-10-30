@@ -179,3 +179,9 @@ Fabric 7 changed little for OxiCut, which uses it in one file (`ReviewCanvas.vue
 Fabric 7.4.0 still pulls two deprecated packages through its optional `jsdom 26` and `canvas 3` (`whatwg-encoding` and `prebuild-install`), so `package.json` has an `overrides` block: `jsdom` at 28 (no deprecated dependencies) and `canvas` pointed at `@napi-rs/canvas` (prebuilt, no install script). Neither is loaded by the app or the tests; they only exist because Fabric lists them as optional. `npm ci` is now silent and `npm audit` finds nothing. If a later Fabric release stops needing them, the overrides can go.
 
 Checked in the built app: boxes in the right places, move, resize, rotate with the four corner magnifiers, zoom with the wheel, pan by dragging the background, clicking away to deselect, and right and middle clicks doing nothing.
+
+## Tests split by side (2026-10-30)
+
+The `Tests` workflow is now three jobs. **`changes`** lists the files a pull request (or a push to `main`) touched and says whether any of them is Rust-related: `crates/`, `app/src-tauri/`, `benchmarks/`, `Cargo.toml`, `Cargo.lock` or the workflow itself. If it cannot tell, it says yes. **`web`** (Linux, always) installs the packages, runs the type check and build, then the tests. **`rust`** (Windows, only when `changes` said yes) runs clippy with warnings denied, a build and the tests. A pull request that only touches the interface, the npm packages or the docs therefore skips the Rust job, and a skipped job counts as passing, so it can still be merged. The checks are now called `web` and `rust` (they were `tests`), so a branch rule that requires the old name has to be changed. The workflow can also be started by hand from the Actions tab, which tests everything.
+
+No `cargo fmt --check` yet: the code has never been run through rustfmt, so it would fail until a one-off `cargo fmt` is committed.
