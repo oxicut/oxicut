@@ -1,8 +1,9 @@
 name: Tests
 
 # Runs on every pull request and every push to main, and by hand from the Actions tab (which tests everything).
-# The web side always runs. The Rust side only runs when a Rust-related file changed, so a pull request
-# that only touches the interface or the npm packages does not pay for the Rust build.
+# Each side only runs when a file it depends on changed: a pull request that only touches documentation runs
+# neither, one that only touches the interface or the npm packages skips the Rust build, and one that only
+# touches the engine skips the web checks.
 on:
   pull_request:
   push:
@@ -17,11 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Decides whether the Rust job is needed. When in doubt it says yes.
+  # Decides which sides are needed. When in doubt it says yes to both. A job that is skipped because of
+  # this counts as passing, so a documentation-only pull request can still be merged.
   changes:
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,11 +36,16 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           BEFORE: ${{ github.event.before }}
-          # The engine, the app's Rust side (with its config and icons), the workspace files, the test
+          # Rust: the engine, the app's Rust side (with its config and icons), the workspace files, the test
           # data the engine tests read, and this workflow.
           RUST_PATHS: '^(crates/|app/src-tauri/|benchmarks/|Cargo\.toml$|Cargo\.lock$|\.github/workflows/ci\.yml$)'
+          # Web: everything in app/ except its Rust side (the interface, the packages, the build and
+          # test settings), and this workflow.
+          WEB_PATHS: '^(app/|\.github/workflows/ci\.yml$)'
+          WEB_NOT: '^app/src-tauri/'
         run: |
           rust=true
+          web=true
           range=""
           if [ "$EVENT" = "pull_request" ]; then
             range="origin/$BASE_REF...HEAD"
@@ -47,14 +55,21 @@ jobs:
           if [ -n "$range" ] && files=$(git diff --name-only "$range"); then
             echo "Changed files:"
             echo "$files"
-            if echo "$files" | grep -Eq "$RUST_PATHS"; then rust=true; else rust=false; fi
+            rust=false
+            web=false
+            if echo "$files" | grep -Eq "$RUST_PATHS"; then rust=true; fi
+            if echo "$files" | grep -E "$WEB_PATHS" | grep -vEq "$WEB_NOT"; then web=true; fi
           else
             echo "Could not list the changed files, so everything is tested."
           fi
           echo "Rust tests needed: $rust"
+          echo "Web checks needed: $web"
           echo "rust=$rust" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
 
   web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,10 +106,15 @@ jobs:
         with:
           components: clippy
 
-      # Same cache as the release workflow, so a pull request starts warm.
+      # What is cached is the output of the three steps below (check, build and test each leave their own),
+      # and the cache is only written when the key is new. So the key includes this file: change a step and
+      # the next run on main makes a complete cache, instead of the old, smaller one matching for ever.
+      # Pull requests only read it (they would each write a copy nobody else can use).
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: windows
+          shared-key: windows-ci
+          key: ${{ hashFiles('.github/workflows/ci.yml') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
 
       # The same downloads cache as the release workflow (ONNX Runtime comes with the Rust build).
