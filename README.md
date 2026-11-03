@@ -19,7 +19,6 @@ Scan a whole pile of photos at once, and let OxiCut cut them apart. Put several 
 - **Turns pictures the right way up.** One click for a sideways or upside-down print.
 - **Puts fronts and backs together.** Scan the postcards, turn the stack over and scan the backs. OxiCut matches each front with its back and saves them as a pair, named `-front` and `-back`.
 - **Keeps your details.** The resolution, colour profile and photo dates of your scan go into every picture.
-- **Lets you describe the pictures.** Write down when and where they were taken, a caption and who is in them, once for a whole scan or for a single picture. It is saved inside each exported picture, where photo programs can read it.
 - **Saves your work by itself.** Close the window any time and OxiCut opens where you stopped. You can keep several projects and open one by double-clicking it.
 - **Never changes your originals,** and never overwrites a file: a new file with the same name gets "(2)" added.
 - **Works without internet.** The one optional download is a helper file for the most careful way of finding pictures, offered the first time you start it.
@@ -55,7 +54,7 @@ More about OxiCut, in plain words: [oxicut.github.io](https://oxicut.github.io).
 
 - PDF files as input.
 - Turning pictures the right way up automatically (one click by hand works now).
-- Map coordinates for a place, and a list of what was saved.
+- Notes such as dates, places and captions, and a list of what was saved.
 - macOS and Linux.
 
 ## Based on ScanSplitter

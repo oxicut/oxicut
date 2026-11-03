@@ -71,6 +71,8 @@ export interface AppSettings extends DetectSettings {
   tagSoftware: boolean;
   outputDir: string | null;
   autoApprove: boolean;
+  /** Features that are built but not switched on for everyone (see docs/feature-flags.md). */
+  features: string[];
 }
 
 export type DetectEvent =
@@ -250,6 +252,8 @@ export const projectRename = (path: string, name: string) => invoke<string>("pro
 export const filesExist = (paths: string[]) => invoke<boolean[]>("files_exist", { paths });
 
 export const loadSettings = () => invoke<AppSettings>("load_settings");
+/** The features that are switched on: none, unless the environment or the settings file says so. */
+export const features = () => invoke<string[]>("features");
 export const saveSettings = (settings: AppSettings) => invoke<void>("save_settings", { settings });
 
 export const modelsStatus = () => invoke<ModelStatus[]>("models_status");

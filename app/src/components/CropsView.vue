@@ -12,6 +12,7 @@ import {
   exportScan,
   exportableCount,
   frontsOf,
+  hasFeature,
   matchAgain,
   removeCrop,
   say,
@@ -135,8 +136,8 @@ const cards = computed<Card[]>(() =>
         index,
         name: written ?? planned,
         chosenName: plan.chosenName,
-        about: detailsLine(detailsFor(scan, box.id)),
-        ownDetails: !!scan.cropDetails[box.id],
+        about: hasFeature("photo-details") ? detailsLine(detailsFor(scan, box.id)) : "",
+        ownDetails: hasFeature("photo-details") && !!scan.cropDetails[box.id],
         role: plan.role,
         partner,
         width: Math.round(box.w),
@@ -149,6 +150,8 @@ const cards = computed<Card[]>(() =>
 );
 
 const lightbox = ref<number | null>(null);
+/** Details (date, place, caption, people) are built but switched off for now (docs/feature-flags.md). */
+const detailsOn = computed(() => hasFeature("photo-details"));
 /** The picture whose own details are being edited. */
 const describing = ref<Card | null>(null);
 
@@ -273,6 +276,7 @@ function showInFolder(card: Card) {
               Remove
             </button>
             <button
+              v-if="detailsOn"
               class="btn tiny"
               :class="{ own: card.ownDetails }"
               title="Date, place, caption and people for this picture only"
@@ -298,7 +302,7 @@ function showInFolder(card: Card) {
       </button>
     </footer>
 
-    <CropDetailsDialog v-if="describing" :scan="describing.scan" :box="describing.box" :name="describing.name" @close="describing = null" />
+    <CropDetailsDialog v-if="describing && detailsOn" :scan="describing.scan" :box="describing.box" :name="describing.name" @close="describing = null" />
     <BacksChooser v-if="choosing && asFront" :front="asFront" @close="choosing = false" />
     <CropLightbox v-if="lightbox !== null" v-model:index="lightbox" :items="cards" @close="lightbox = null" />
   </section>

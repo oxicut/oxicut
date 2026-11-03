@@ -50,6 +50,8 @@ Change `version` in the root `Cargo.toml` (it feeds the app, the installer and t
 
 ## Date, place, caption and people
 
+This is hidden behind the `photo-details` flag (see [`feature-flags.md`](feature-flags.md)). Start the app with it on, for example in PowerShell: `$env:OXICUT_FEATURES = "photo-details"`, then run the app (or put `"features": ["photo-details"]` in the settings file). **With the flag off, as in a normal run, check that none of it shows**: no Details tab on the right, no *About this picture…* on the crop cards, no line of date and place on them, and an export carries no XMP and keeps the scan's own date and description. With it on:
+
 Open the **Details** tab (right panel) with a scan selected and fill in the fields: the line under *Date* says what OxiCut understood ("Saved as about 1980." for "circa 1980"; "No year found, so it is kept as you wrote it." when there is no year). In the **Crops** view each card shows the date and place in small type, and **About this picture…** opens that picture's own details (what you leave empty is taken from the scan, shown greyed out; **Use the scan's details** clears them). **Copy to the other scans** only fills what is still empty. Then export and check:
 
 - in Windows (right click a saved JPEG, Properties, Details) *Date taken*, *Comments* or the description show the date and caption; a program that reads XMP (for example a photo library) shows the caption, the people as tags, and the place;

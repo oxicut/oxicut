@@ -9,6 +9,7 @@ import {
   exampleFileName,
   exportApproved,
   exportableCount,
+  hasFeature,
   redetectAll,
   say,
   showExportFolder,
@@ -19,6 +20,9 @@ import { layout, togglePanel } from "../layout";
 import DetailsPanel from "./DetailsPanel.vue";
 
 type Tab = "detect" | "details" | "export" | "models";
+
+// The Details tab is built but switched off for now (docs/feature-flags.md).
+const detailsOn = computed(() => hasFeature("photo-details"));
 const tab = ref<Tab>("detect");
 
 // v7 runs MobileSAM, so it can be chosen once both of its files are on disk.
@@ -76,7 +80,7 @@ const openModelsFolder =() =>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="8" cy="17" r="2" /></svg>
       {{ state.settings.mode }}
     </button>
-    <button class="tool" :aria-pressed="tab === 'details'" title="About the pictures: date, place, caption, people" @click="showTab('details')">
+    <button v-if="detailsOn" class="tool" :aria-pressed="tab === 'details'" title="About the pictures: date, place, caption, people" @click="showTab('details')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5" /></svg>
       Details
     </button>
@@ -99,7 +103,7 @@ const openModelsFolder =() =>
   <aside v-else class="panel">
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" :aria-selected="tab === 'detect'" @click="tab = 'detect'">Detection</button>
-      <button class="tab" role="tab" :aria-selected="tab === 'details'" @click="tab = 'details'">Details</button>
+      <button v-if="detailsOn" class="tab" role="tab" :aria-selected="tab === 'details'" @click="tab = 'details'">Details</button>
       <button class="tab" role="tab" :aria-selected="tab === 'export'" @click="tab = 'export'">Export</button>
       <button class="tab" role="tab" :aria-selected="tab === 'models'" @click="tab = 'models'">Models</button>
       <button class="tab-toggle" title="Hide the side panel (Ctrl+Shift+B)" aria-label="Hide the side panel" @click="togglePanel">»</button>
@@ -169,7 +173,7 @@ const openModelsFolder =() =>
       </button>
     </div>
 
-    <DetailsPanel v-else-if="tab === 'details'" />
+    <DetailsPanel v-else-if="tab === 'details' && detailsOn" />
 
     <div v-else-if="tab === 'export'" class="body">
       <label class="field">

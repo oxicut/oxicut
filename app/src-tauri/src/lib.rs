@@ -224,6 +224,12 @@ fn load_settings() -> AppSettings {
     settings::load()
 }
 
+/// The features that are switched on (none, unless the environment or the settings file says so).
+#[tauri::command]
+fn features() -> Vec<String> {
+    settings::enabled_features()
+}
+
 #[tauri::command]
 fn save_settings(settings: AppSettings) -> Result<(), String> {
     settings::save(&settings)
@@ -305,6 +311,7 @@ pub fn run() {
             evaluate_flags,
             export_scans,
             load_settings,
+            features,
             save_settings,
             models_status,
             models_folder,

@@ -83,6 +83,7 @@ export const defaultSettings: AppSettings = {
   maxAreaPercent: 80,
   insetPx: 0,
   cutTo: "card",
+  features: [],
   format: "same",
   jpegQuality: 92,
   pattern: "{source}-{n}",
@@ -113,9 +114,16 @@ export const state = reactive({
   modelsFolder: "",
   version: "",
   repository: "",
+  /** Features that are switched on (see docs/feature-flags.md); none unless asked for. */
+  features: [] as string[],
   modelProgress: {} as Record<string, { downloaded: number; total: number | null }>,
   modelErrors: {} as Record<string, string>,
 });
+
+/** Features that are built but hidden until they are ready. The name is what the environment variable and the settings file use. */
+export type FeatureName = "photo-details";
+
+export const hasFeature = (name: FeatureName): boolean => state.features.includes(name);
 
 export const selectedScan = computed(() => state.scans.find((s) => s.id === state.selectedId) ?? null);
 export const approvedCount = computed(() => state.scans.filter((s) => s.status === "approved").length);
@@ -491,6 +499,8 @@ export function detailsFor(scan: ScanItem, boxId: number): Details {
 
 /** What the export writes for one picture; `null` when nothing was entered. */
 export function detailsForExport(scan: ScanItem, boxId: number): ExportDetails | null {
+  // Switched off: whatever a project holds is left out of the pictures.
+  if (!hasFeature("photo-details")) return null;
   return toExportDetails(detailsFor(scan, boxId));
 }
 
@@ -961,6 +971,7 @@ async function openStartProject(wanted: string | null) {
 
 export async function initApp() {
   await initSettings();
+  state.features = await api.features().catch(() => []);
   void api.appVersion().then((v) => (state.version = v));
   void api.appRepository().then((url) => (state.repository = url));
   void refreshModels();
