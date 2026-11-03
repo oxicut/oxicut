@@ -14,7 +14,7 @@ import ViewSwitch from "./ViewSwitch.vue";
 import { resizeBox, type SizeChange } from "../cropSize";
 import { describeSuggestion } from "../suggestions";
 import type { Box } from "../api";
-import { FLAG_LABELS, newBoxId, previewFor, resizeCrop, suggestCuts, type BoxItem, type ScanItem } from "../store";
+import { FLAG_LABELS, detectSettings, newBoxId, previewFor, resizeCrop, suggestCuts, type BoxItem, type ScanItem } from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
 const emit = defineEmits<{
@@ -709,6 +709,15 @@ watch(() => [props.scan?.id, props.scan?.revision, props.scan?.width], () => {
   cutMessage.value = "";
   void rebuild();
 });
+// The other cuts depend on the detection settings (the detector, the size limits, cut around): look again
+// when they change, not only when the selection does.
+watch(
+  () => JSON.stringify(detectSettings()),
+  () => {
+    found.value = null;
+    lookForCuts();
+  },
+);
 // Undo or redo put other boxes back.
 watch(() => props.scan?.epoch, applyBoxes);
 // Re-colour boxes as warnings come and go.

@@ -153,7 +153,7 @@ const withId = (box: Box): BoxItem => ({ ...box, id: nextBoxId++ });
 export const newBoxId = () => nextBoxId++;
 const errorText = (e: unknown) => (typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
 
-function detectSettings(): api.DetectSettings {
+export function detectSettings(): api.DetectSettings {
   const s = state.settings;
   return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx, cutTo: s.cutTo, autoOrient: s.autoOrient };
 }
