@@ -11,6 +11,7 @@ const scan = {
   status: "approved",
   boxes: [{ cx: 10, cy: 20, w: 30, h: 40, angle: 5, id: 99 } as never],
   detectedKey: "k",
+  detectedWith: "w",
   exportedKey: null,
   exportedFiles: ["D:/out/a-1.png"],
   backsOn: null,
@@ -143,4 +144,10 @@ test("pictures turned automatically are saved by position, and only while they a
   assert.deepEqual(autoTurnedFromPositions(back.autoTurnedPositions, boxes), { 11: autoTurnedMark(boxes[1]) });
   assert.deepEqual(autoTurnedFromPositions([7], boxes), {});
   assert.deepEqual(fromRecord({ id: 1, path: "x.png" }).autoTurnedPositions, []);
+});
+
+test("the settings a scan was found with are saved, and an older record opens without them", () => {
+  assert.equal(toRecord(scan).detectedWith, "w");
+  assert.equal(fromRecord(toRecord(scan)).detectedWith, "w");
+  assert.equal(fromRecord({ id: 1, path: "x.png" }).detectedWith, "");
 });

@@ -16,6 +16,8 @@ export interface SavedScan {
   /** Boxes as they are on screen (with their ids) or as they were saved (without). */
   boxes: (Box & { id?: number })[];
   detectedKey: string;
+  /** The detection settings the scan was found with (`detectKey`); empty when not known. */
+  detectedWith: string;
   exportedKey: string | null;
   exportedFiles: string[];
   /** The scan holding the backs of this scan's pictures, when this is a scan of fronts. */
@@ -118,6 +120,7 @@ export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord
     status: scan.status,
     boxes: scan.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })),
     detectedKey: scan.detectedKey,
+    detectedWith: scan.detectedWith,
     exportedKey: scan.exportedKey,
     exportedFiles: [...scan.exportedFiles],
     backsOn: scan.backsOn,
@@ -146,6 +149,7 @@ export function fromRecord(
     status: measured ? restoreStatus(record.status) : "queued",
     boxes: boxes.map((b) => ({ cx: b.cx, cy: b.cy, w: b.w, h: b.h, angle: b.angle })),
     detectedKey: record.detectedKey ?? "",
+    detectedWith: record.detectedWith ?? "",
     exportedKey: record.exportedKey ?? null,
     exportedFiles: Array.isArray(record.exportedFiles) ? record.exportedFiles.filter((f) => typeof f === "string") : [],
     backsOn: typeof record.backsOn === "number" ? record.backsOn : null,

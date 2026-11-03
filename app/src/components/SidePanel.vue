@@ -16,6 +16,7 @@ import {
   state,
 } from "../store";
 import type { ScanItem } from "../store";
+import { outOfDateScans } from "../store";
 import { layout, togglePanel } from "../layout";
 import DetailsPanel from "./DetailsPanel.vue";
 
@@ -185,7 +186,16 @@ const openModelsFolder =() =>
       </label>
 
       <p class="muted note">These apply to scans detected from now on.</p>
-      <button class="btn" :disabled="!state.scans.length || state.detect.active" @click="redetectAll">
+      <p v-if="outOfDateScans.length" class="note stale" role="status">
+        {{ outOfDateScans.length }} of {{ state.scans.length }}
+        {{ state.scans.length === 1 ? "scan was" : "scans were" }} found with other settings.
+      </p>
+      <button
+        class="btn"
+        :class="{ attention: outOfDateScans.length > 0 }"
+        :disabled="!state.scans.length || state.detect.active"
+        @click="redetectAll"
+      >
         Re-detect all {{ state.scans.length }} scans with these settings
       </button>
     </div>
