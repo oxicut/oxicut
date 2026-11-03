@@ -31,6 +31,8 @@ pub struct AppSettings {
     pub inset_px: i32,
     /// What a box is cut around: `card` (the whole card or print) or `picture`.
     pub cut_to: String,
+    /// Turn pictures that are sideways or upside down the right way up as they are found.
+    pub auto_orient: bool,
     /// `same`, `jpg`, `png` or `tiff`.
     pub format: String,
     pub jpeg_quality: u8,
@@ -61,6 +63,7 @@ impl Default for AppSettings {
             max_area_percent: 80.0,
             inset_px: 0,
             cut_to: "card".into(),
+            auto_orient: true,
             format: "same".into(),
             jpeg_quality: 92,
             pattern: "{source}-{n}".into(),
@@ -171,6 +174,8 @@ mod tests {
         assert_eq!(from_old.inset_px, 4);
         // A file from before the choice existed cuts around the whole card.
         assert_eq!(from_old.cut_to, "card");
+        // And turns pictures the right way up when it can.
+        assert!(from_old.auto_orient);
         assert_eq!(from_old.format, "same");
         assert_eq!(from_old.pattern, "{source}-{n}");
         assert!(from_old.auto_approve);

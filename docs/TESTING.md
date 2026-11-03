@@ -66,6 +66,15 @@ The date taken is a representative date: a month or day you did not give becomes
 
 Scan postcards on the white lid (cream, tan and white cards, a few touching the edge of the scan, some with a strongly coloured picture and a bare margin) and add the scan. With **Cut around** set to *The whole card or print* (Detection tab, the default) every box should follow the card's paper edge, margins included, for all three detectors, and the scan should not need hand fixing. Switch it to *Only the picture*, press *Re-detect all* and the boxes go back to the pictures (white borders left out). Known to be hard: a card whose margin is as white as the lid, cards that touch each other, and a card with a plain white strip at the bottom (the strip is not told from the lid). For a corrected project file, `oxicut detect scan.jpg --mode v3 | node tools/compare-project.mjs scan.oxicut` prints how well each hand-fixed box was found.
 
+## Pictures that lie the wrong way
+
+Add a scan where some pictures lie sideways or upside down (the Detection tab switch **Turn pictures the right way up** is on by default). Without the helper file the switch says it needs a one-time download and offers a **Download** button; the Models tab lists the same file as "Orientation helper". After the download, press *Re-detect all*. Check:
+
+- sideways and upside-down pictures come out upright in the Crops view with a small **Turned** mark beside the size; pictures that were already upright are left alone, and an unclear one (abstract art) is left as it was rather than guessed;
+- Left or Right on a turned picture removes its mark; *Undo* on the canvas brings the turn back;
+- close the app and open it again: the turns and marks are still there;
+- switch the setting off and re-detect: the pictures come out as found, nothing turned.
+
 ## Fronts and backs
 
 Scan the fronts of some postcards, then turn the stack over and scan the backs. Add both scans, open the **Crops** view on the scan of the fronts and choose **Backs are on another scan…**. Check:

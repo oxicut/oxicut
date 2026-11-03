@@ -11,12 +11,13 @@ use std::time::Instant;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
-use image::RgbImage;
 use image::codecs::jpeg::JpegEncoder;
+use image::{DynamicImage, RgbImage};
 use oxicut_core::crop::crop_region;
 use oxicut_core::detect::{CutTo, DetectOptions, Detection, detect_v3};
 use oxicut_core::geometry::RotatedRect;
 use oxicut_core::io::{load_image, to_detection_rgb};
+use oxicut_core::orient::{MIN_CONFIDENCE, turn_rect, with_orientation};
 use oxicut_core::resize::resize_area;
 use oxicut_core::v7::{detect_v7, detect_v7_lite};
 use serde::{Deserialize, Serialize};
@@ -156,6 +157,9 @@ pub struct DetectSettings {
     pub max_area_percent: f64,
     pub inset_px: i32,
     pub cut_to: CutAround,
+    /// Turn the pictures that are sideways or upside down the right way up as they are found (needs the
+    /// orientation model; without it nothing happens).
+    pub auto_orient: bool,
 }
 
 impl Default for DetectSettings {
@@ -168,6 +172,7 @@ impl Default for DetectSettings {
             // ground truth the untrimmed box is the accurate one.
             inset_px: 0,
             cut_to: CutAround::default(),
+            auto_orient: true,
         }
     }
 }
@@ -193,6 +198,8 @@ pub struct ScanAnalysis {
     pub width: u32,
     pub height: u32,
     pub boxes: Vec<BoxDto>,
+    /// Positions of the boxes that were turned the right way up automatically.
+    pub turned: Vec<usize>,
     /// `data:image/jpeg;base64,...`, at most 220 px on the long side.
     pub thumbnail: String,
     pub millis: u64,
@@ -307,26 +314,92 @@ fn detect_full_v7(rgb: &image::RgbImage, options: &DetectOptions) -> Result<Dete
         .map_err(|e| e.to_string())
 }
 
+/// Turn every box whose crop `quarters_needed` says is not upright (the number of quarter turns clockwise, 0
+/// for none), the way the Left and Right buttons turn a crop. Returns the positions of the boxes turned.
+pub fn turn_boxes_upright(
+    scan: &DynamicImage,
+    boxes: &mut [BoxDto],
+    quarters_needed: &mut dyn FnMut(&RgbImage) -> u8,
+) -> Vec<usize> {
+    let mut turned = Vec::new();
+    for (index, b) in boxes.iter_mut().enumerate() {
+        let rect = RotatedRect::new(b.cx, b.cy, b.w, b.h, b.angle);
+        let Some(crop) = crop_region(scan, &rect) else {
+            continue;
+        };
+        let quarters = quarters_needed(&crop.to_rgb8());
+        if quarters.is_multiple_of(4) {
+            continue;
+        }
+        let after = turn_rect(&rect, quarters);
+        *b = BoxDto {
+            cx: after.cx,
+            cy: after.cy,
+            w: after.w,
+            h: after.h,
+            angle: after.angle,
+        };
+        turned.push(index);
+    }
+    turned
+}
+
+/// The orientation model, when it is switched on and downloaded. Never in this crate's own tests, which must
+/// not depend on what the machine they run on has downloaded.
+fn orientation_model(settings: &DetectSettings) -> Option<PathBuf> {
+    if cfg!(test) || !settings.auto_orient {
+        return None;
+    }
+    let dir = oxicut_models::models_dir().ok()?;
+    let path = oxicut_models::model_path(&dir, &oxicut_models::ORIENTATION);
+    path.is_file().then_some(path)
+}
+
 /// Decode `path`, find its prints, and leave a screen preview in the cache.
 pub fn analyze_scan(
     path: &Path,
     settings: &DetectSettings,
     cache_dir: &Path,
 ) -> Result<ScanAnalysis, String> {
+    let model = orientation_model(settings);
+    analyze_scan_with(path, settings, cache_dir, &mut |scan, boxes| {
+        let Some(model) = &model else {
+            return Vec::new();
+        };
+        // One shared model: the detect workers take turns, and a failure only means nothing is turned.
+        with_orientation(model, |m| {
+            turn_boxes_upright(scan, boxes, &mut |crop| {
+                m.classify(crop).map(|answer| answer.decided(MIN_CONFIDENCE)).unwrap_or(0)
+            })
+        })
+        .unwrap_or_default()
+    })
+}
+
+/// [`analyze_scan`] with the way boxes are turned upright given by the caller (the full-size scan and the
+/// boxes in, the positions turned out): tests hand in a stand-in for the model.
+pub fn analyze_scan_with(
+    path: &Path,
+    settings: &DetectSettings,
+    cache_dir: &Path,
+    orient: &mut dyn FnMut(&DynamicImage, &mut Vec<BoxDto>) -> Vec<usize>,
+) -> Result<ScanAnalysis, String> {
     let started = Instant::now();
     let name = file_name(path);
     let image = load_image(path).map_err(|e| format!("Could not read {name}: {e}"))?;
     let (width, height) = (image.width(), image.height());
-    let rgb = to_detection_rgb(&image);
-    drop(image); // a 16-bit scan is large; the 8-bit copy is all that is needed from here
+    // A 16-bit scan is large; the 8-bit copy is all that is needed from here.
+    let scan = DynamicImage::ImageRgb8(to_detection_rgb(&image));
+    drop(image);
+    let rgb = scan.as_rgb8().expect("made as 8-bit RGB above");
 
     let options = settings.options();
     let detection = match settings.mode {
-        Detector::V3 => detect_v3(&rgb, &options),
-        Detector::V7Lite => detect_v7_lite(&rgb, &options),
-        Detector::V7 => detect_full_v7(&rgb, &options)?,
+        Detector::V3 => detect_v3(rgb, &options),
+        Detector::V7Lite => detect_v7_lite(rgb, &options),
+        Detector::V7 => detect_full_v7(rgb, &options)?,
     };
-    let boxes = detection
+    let mut boxes: Vec<BoxDto> = detection
         .regions
         .iter()
         .map(|r| BoxDto {
@@ -337,14 +410,16 @@ pub fn analyze_scan(
             angle: r.rect.angle,
         })
         .collect();
-    write_preview(&rgb, cache_dir, path)?;
-    let thumbnail = make_thumbnail(&rgb, cache_dir, path)?;
+    let turned = orient(&scan, &mut boxes);
+    write_preview(rgb, cache_dir, path)?;
+    let thumbnail = make_thumbnail(rgb, cache_dir, path)?;
     Ok(ScanAnalysis {
         path: path.to_string_lossy().into_owned(),
         name,
         width,
         height,
         boxes,
+        turned,
         thumbnail,
         millis: started.elapsed().as_millis() as u64,
     })
@@ -507,6 +582,35 @@ mod tests {
             vec!["b2.JPG", "b10.jpg", "c.tiff"],
             "subfolders are not entered"
         );
+    }
+
+    #[test]
+    fn pictures_the_helper_names_are_turned_and_the_rest_left_alone() {
+        let dir = scratch("orient");
+        let scan = dir.join("scan.png");
+        write_scan(&scan);
+        let settings = DetectSettings {
+            inset_px: 0,
+            ..Default::default()
+        };
+        let plain = analyze_scan(&scan, &settings, &dir.join("cache-a")).unwrap();
+        assert!(plain.turned.is_empty(), "no helper in tests, so nothing is turned");
+        assert_eq!(plain.boxes.len(), 2);
+
+        // A stand-in helper that wants the first picture turned a quarter clockwise.
+        let analysis = analyze_scan_with(&scan, &settings, &dir.join("cache-b"), &mut |image, boxes| {
+            let mut calls = 0;
+            turn_boxes_upright(image, boxes, &mut |_| {
+                calls += 1;
+                if calls == 1 { 1 } else { 0 }
+            })
+        })
+        .unwrap();
+        assert_eq!(analysis.turned, vec![0]);
+        let (before, after) = (&plain.boxes[0], &analysis.boxes[0]);
+        assert_eq!((after.w, after.h), (before.h, before.w));
+        assert_eq!((after.cx, after.cy), (before.cx, before.cy));
+        assert_eq!(analysis.boxes[1], plain.boxes[1]);
     }
 
     #[test]

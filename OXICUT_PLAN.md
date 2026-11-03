@@ -194,7 +194,7 @@ cx, cy, w, h, angle, source px) and `debug.png` with boxes drawn.
 - Input: JPEG, PNG, TIFF (8/16-bit, from an Epson flatbed). Output: same format or user-chosen.
 - Postcards: both sides scanned on separate beds; pairing is a project feature.
 - Files only — no TWAIN/WIA scanning from the app.
-- Orientation (which way is up) is out of scope for v1.
+- Orientation (which way is up) was out of scope for v1; it came in Phase 6 (`docs/orientation.md`).
 
 ---
 

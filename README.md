@@ -16,12 +16,12 @@ Scan a whole pile of photos at once, and let OxiCut cut them apart. Put several 
 - **Straightens every picture** and saves it as its own file, at the full quality of your scan.
 - **Lets you check first.** Scans where nothing looks wrong are approved by themselves. The ones that need a look wait for you.
 - **Easy to fix.** Move, resize or turn a frame, add one that was missed, split two pictures that were found as one, or make a crop a little closer or wider. A magnifier follows the corner you are working on.
-- **Turns pictures the right way up.** One click for a sideways or upside-down print.
+- **Turns pictures the right way up.** Sideways and upside-down prints are turned for you while they are found (a one-time download of a helper file, offered when you switch it on), and one click turns any other.
 - **Puts fronts and backs together.** Scan the postcards, turn the stack over and scan the backs. OxiCut matches each front with its back and saves them as a pair, named `-front` and `-back`.
 - **Keeps your details.** The resolution, colour profile and photo dates of your scan go into every picture.
 - **Saves your work by itself.** Close the window any time and OxiCut opens where you stopped. You can keep several projects and open one by double-clicking it.
 - **Never changes your originals,** and never overwrites a file: a new file with the same name gets "(2)" added.
-- **Works without internet.** The one optional download is a helper file for the most careful way of finding pictures, offered the first time you start it.
+- **Works without internet.** The two optional downloads are a helper file for the most careful way of finding pictures, offered the first time you start it, and one that turns pictures the right way up, offered when you use that.
 
 ## Download
 
@@ -53,7 +53,6 @@ More about OxiCut, in plain words: [oxicut.github.io](https://oxicut.github.io).
 ## What is not there yet
 
 - PDF files as input.
-- Turning pictures the right way up automatically (one click by hand works now).
 - Notes such as dates, places and captions, and a list of what was saved.
 - macOS and Linux.
 
@@ -83,7 +82,7 @@ How closely the port follows the original, and every place it deviates, is writt
 - **A review workflow built for batches.** Scans with nothing suspicious are approved automatically; the ones flagged (nothing found, touches the scan edge, unusual shape, overlapping boxes) wait for you. Rotatable, resizable boxes on a Fabric.js canvas, undo and redo per scan, loupes on every handle and, while a box is moved or rotated, in all four of its corners. Projects are `.oxicut` files (small JSON files in the OxiCut folder in Documents).
 
 **What ScanSplitter has that OxiCut does not (yet)**
-- PDF input, automatic 90/180/270 degree orientation (planned; the orientation model is already in the registry), archival metadata and manifests (Phase 5 of the roadmap), Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
+- PDF input, archival metadata and manifests (Phase 5 of the roadmap), Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
 - Small differences to expect on the same scan: OxiCut decodes JPEG with a different library than Pillow, so on hard images boxes can differ by a few pixels, and its default trim is 0 px (ScanSplitter's 10 px shrinks every box).
 
 ## Command line
@@ -114,6 +113,6 @@ cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 
 ## Credits and license
 
-The detection pipeline, its benchmark methodology and the choice of MobileSAM are ScanSplitter's, by Madnex. MobileSAM weights are from [Acly/MobileSAM](https://huggingface.co/Acly/MobileSAM).
+The detection pipeline, its benchmark methodology and the choice of MobileSAM are ScanSplitter's, by Madnex. MobileSAM weights are from [Acly/MobileSAM](https://huggingface.co/Acly/MobileSAM). The orientation model is [deep-image-orientation-detection](https://github.com/duartebarbosadev/deep-image-orientation-detection) by Duarte Barbosa (MIT licence), chosen by ScanSplitter; OxiCut asks it for all four quarter turns of a picture instead of one answer (see [`docs/orientation.md`](docs/orientation.md)).
 
 OxiCut is licensed under the GNU General Public License v3.0, as a derivative work of ScanSplitter. See [LICENSE](LICENSE).

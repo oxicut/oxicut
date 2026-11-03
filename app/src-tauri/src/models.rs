@@ -22,7 +22,7 @@ pub struct ModelStatusDto {
 fn used_by(spec: &ModelSpec) -> &'static str {
     match spec.id {
         "mobilesam-encoder" | "mobilesam-decoder" => "Detectors v5 and v7",
-        _ => "Not used yet (planned: telling which way up a print is)",
+        _ => "Turns pictures the right way up",
     }
 }
 
@@ -129,6 +129,9 @@ mod tests {
             ("corrupt", Some(12))
         );
         assert!(encoder.used_by.contains("v7"));
+        let orientation = after.iter().find(|m| m.id == "orientation").unwrap();
+        assert_eq!(orientation.used_by, "Turns pictures the right way up");
+        assert_eq!(orientation.label, "Orientation helper");
     }
 
     #[test]

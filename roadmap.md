@@ -141,7 +141,7 @@ Reprioritised 2026-10-26 at the user's request: connect the app to the working v
 
 ## Phase 6: Later
 
-- [ ] Orientation model (0/90/180/270) via `ort`, registered in `oxicut-models`.
+- [x] **Orientation model** (0/90/180/270) via `ort`: pictures are turned the right way up while they are found, switch in the Detection tab (on), one-time download offered there and in the Models tab, "Turned" mark on the crops. Differs from ScanSplitter on purpose: all four quarter turns combined with a confidence limit instead of one answer (28 of 32 right on real postcards against 26, no confident mistakes). See `docs/orientation.md`.
 - [ ] Settings toggle to pre-download all models; custom mirror URL.
 - [ ] macOS/Linux builds.
 - [x] **Whole cards on a white lid**: found on a real scan of eight cream and tan postcards (all three detectors boxed the pictures, mean overlap with the hand-fixed boxes 0.6). A card pass (lid colour kept apart from cream and tan paper, pale paper as foreground, stacked cards split and fitted) is tried first when **Cut around** is *The whole card or print* (default, in the Detection tab) and the classic detector is the fallback; *Only the picture* keeps ScanSplitter's behaviour. 0.96 for v3 and v7-lite, 0.92 for v7 on that scan. _(Still open: a card with a margin as white as the lid, touching cards, and a plain white strip at the edge of a card.)_
@@ -178,7 +178,7 @@ Plan, research and sources: [`docs/distribution-plan.md`](docs/distribution-plan
 - Input: JPEG, PNG, TIFF (8/16-bit, Epson flatbed). Output: same format or user-chosen.
 - Postcards: both sides scanned on separate beds; pairing is a project feature.
 - Files only, no TWAIN/WIA scanning from the app.
-- Orientation (which way is up) is out of scope for v1.
+- Orientation (which way is up) was out of scope for v1; it came in Phase 6.
 
 ## Resources
 

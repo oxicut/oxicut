@@ -1,6 +1,7 @@
 // Turning the scan list into what a `.oxicut` file holds and back. No Vue here, so it is easy to test.
 
 import type { Box, ProjectFile, ScanRecord } from "./api";
+import { boxesKey } from "./closeGuard.ts";
 import { isEmptyDetails, limitDetails, noDetails, type Details } from "./details.ts";
 import type { Pair } from "./pairing.ts";
 
@@ -25,6 +26,8 @@ export interface SavedScan {
   details: Details;
   /** Pictures with details of their own, by box id (an empty field means "use the scan's"). */
   cropDetails: Record<number, Details>;
+  /** Pictures turned the right way up automatically, by box id, with the box as it was left (see `autoTurnedNow`). */
+  autoTurned: Record<number, string>;
   error: string | null;
 }
 
@@ -79,6 +82,31 @@ export function cropDetailsFromRecords(records: ({ index: number } & Details)[],
   return out;
 }
 
+/** The mark for a picture that was just turned automatically: the box as it was left. Any later edit changes the box, so the mark no longer fits. */
+export function autoTurnedMark(box: Box): string {
+  return boxesKey([box]);
+}
+
+/** The pictures still as they were left by the automatic turn, as positions in the box list. */
+export function autoTurnedPositions(scan: SavedScan): number[] {
+  const positions: number[] = [];
+  scan.boxes.forEach((box, index) => {
+    const mark = box.id === undefined ? undefined : scan.autoTurned[box.id];
+    if (mark !== undefined && mark === autoTurnedMark(box)) positions.push(index);
+  });
+  return positions;
+}
+
+/** The marks back by box id, once the boxes have their ids. */
+export function autoTurnedFromPositions(positions: number[], boxes: (Box & { id: number })[]): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const index of positions) {
+    const box = boxes[index];
+    if (box) out[box.id] = autoTurnedMark(box);
+  }
+  return out;
+}
+
 /** `all` is every scan of the project: a pair is saved as positions, which needs the other scan's boxes. */
 export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord {
   return {
@@ -96,6 +124,7 @@ export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord
     pairs: pairPositions(scan, all),
     details: limitDetails(scan.details),
     cropDetails: cropDetailRecords(scan),
+    autoTurned: autoTurnedPositions(scan),
     error: scan.error,
   };
 }
@@ -103,7 +132,7 @@ export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord
 /** A record as the app wants it, whatever an older or newer file left out. */
 export function fromRecord(
   record: Partial<ScanRecord> & { id: number; path: string },
-): SavedScan & { status: RestoredStatus; pairPositions: [number, number][]; cropDetailRecords: ({ index: number } & Details)[] } {
+): SavedScan & { status: RestoredStatus; pairPositions: [number, number][]; cropDetailRecords: ({ index: number } & Details)[]; autoTurnedPositions: number[] } {
   const name = record.name || record.path.split(/[\\/]/).pop() || record.path;
   const boxes = Array.isArray(record.boxes) ? record.boxes : [];
   // A scan never measured (size 0) was not analysed yet, whatever status it claims.
@@ -127,6 +156,8 @@ export function fromRecord(
       : [],
     details: limitDetails(record.details ?? noDetails()),
     cropDetails: {},
+    autoTurned: {},
+    autoTurnedPositions: Array.isArray(record.autoTurned) ? record.autoTurned.filter((i) => Number.isInteger(i) && i >= 0) : [],
     // By position in the box list; the store turns them into box ids once every box has its id.
     cropDetailRecords: Array.isArray(record.cropDetails)
       ? record.cropDetails
