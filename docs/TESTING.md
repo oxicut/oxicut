@@ -85,6 +85,12 @@ Select one picture on the canvas. The **Another cut** button (left column, under
 - with the full v7 chosen and the models downloaded, the first lookup on a scan takes a few seconds and the next picture on the same scan is quick;
 - with "reduce motion" on in Windows, the button does not pulse and the count does not fade in.
 
+## Which picture is which, and when settings changed
+
+- Select a picture on the scan, then press **Crops**: its card has a ring and a small "Selected" mark, and the view opens scrolled to it (also under *All scans*). Open a picture larger, step to another, close, and press **Scan**: that box is selected on the canvas.
+- Detect a scan, then change a detection setting (the detector, smallest or largest print, trim, cut around, or *Turn pictures the right way up*): **Re-detect** in the toolbar becomes **Re-detect with new settings** and is outlined, and in the Detection tab the *Re-detect all* button is outlined with a line such as "2 of 2 scans were found with other settings." Pressing either brings the scan back to normal. A change to an export option or the theme does nothing.
+- Move a box by hand, then change a setting: that scan's button stays plain. Close and open the project: the outlines come back where a scan was found with other settings; a project from before this was added shows none.
+
 ## Fronts and backs
 
 Scan the fronts of some postcards, then turn the stack over and scan the backs. Add both scans, open the **Crops** view on the scan of the fronts and choose **Backs are on another scan…**. Check:

@@ -122,6 +122,17 @@ select {
   filter: brightness(1.08);
   background: var(--accent);
 }
+/* Asks for attention without shouting: the action the screen is waiting for (outline and fill, not colour alone). */
+.btn.attention {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+  font-weight: 600;
+}
+.btn.attention:hover:not(:disabled) {
+  background: var(--accent-soft);
+  filter: brightness(0.97);
+}
 .btn.ghost {
   background: transparent;
   border-color: transparent;

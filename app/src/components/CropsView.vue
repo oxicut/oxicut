@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import * as api from "../api";
 import { boxesKey } from "../closeGuard";
 import { baseName } from "../cropNames";
@@ -15,6 +15,7 @@ import {
   frontsOf,
   hasFeature,
   matchAgain,
+  pickBox,
   removeCrop,
   say,
   selectScan,
@@ -153,6 +154,21 @@ const cards = computed<Card[]>(() =>
 );
 
 const lightbox = ref<number | null>(null);
+
+/** The picture selected on the scan (or opened larger) gets a ring, and the view opens scrolled to it. */
+const isPicked = (card: Card) => state.picked?.scanId === card.scan.id && state.picked?.boxId === card.box.id;
+
+onMounted(async () => {
+  await nextTick();
+  const picked = state.picked;
+  if (picked) document.querySelector(`[data-card="${picked.scanId}-${picked.boxId}"]`)?.scrollIntoView({ block: "center" });
+});
+
+// Going back to the scan selects the picture that was looked at here.
+watch(lightbox, (index) => {
+  const card = index === null ? undefined : cards.value[index];
+  if (card) pickBox(card.scan.id, card.box.id);
+});
 /** Details (date, place, caption, people) are built but switched off for now (docs/feature-flags.md). */
 const detailsOn = computed(() => hasFeature("photo-details"));
 /** The picture whose own details are being edited. */
@@ -235,7 +251,14 @@ function showInFolder(card: Card) {
       </p>
 
       <ul v-else class="grid">
-        <li v-for="(card, i) in cards" :key="`${card.scan.id}-${card.box.id}`" class="card">
+        <li
+          v-for="(card, i) in cards"
+          :key="`${card.scan.id}-${card.box.id}`"
+          class="card"
+          :class="{ picked: isPicked(card) }"
+          :data-card="`${card.scan.id}-${card.box.id}`"
+          :aria-current="isPicked(card) ? 'true' : undefined"
+        >
           <button class="picture" :title="`Look at ${card.name} larger`" @click="lightbox = i">
             <img v-if="card.picture" :src="card.picture" :alt="card.name" />
             <span v-else-if="card.scan.missing" class="gone">This scan could not be found</span>
@@ -246,6 +269,7 @@ function showInFolder(card: Card) {
             <span v-if="state.cropsScope === 'all'" class="muted small" :title="card.scan.path">from {{ card.scan.name }}</span>
             <span class="size">
               <span class="muted small">{{ card.width }} × {{ card.height }} px</span>
+              <span v-if="isPicked(card)" class="chip accent" title="The picture selected on the scan">Selected</span>
               <span v-if="card.autoTurned" class="chip" title="Turned the right way up automatically. Left and Right turn it back.">Turned</span>
             </span>
             <span v-if="card.about" class="muted small about" :title="card.about">{{ card.about }}</span>
@@ -389,6 +413,11 @@ function showInFolder(card: Card) {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
+}
+.card.picked {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  background: var(--accent-soft);
 }
 .picture {
   /* The height is a number, not a percentage: a percentage max-height on the picture does not resolve

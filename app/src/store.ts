@@ -17,6 +17,7 @@ import { fillEmpty, isEmptyDetails, mergeDetails, noDetails, toExportDetails, ty
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
+import { detectKey, isOutOfDate } from "./detectStale";
 import { applyTheme } from "./appearance";
 import { resizeBox, type SizeChange } from "./cropSize";
 import { turnBox } from "./cropTurn";
@@ -47,6 +48,8 @@ export interface ScanItem {
   epoch: number;
   /** `boxesKey` of what detection produced, to tell whether the user changed anything. */
   detectedKey: string;
+  /** `detectKey` of the detection settings the scan was found with (saved with the project; empty when not known). */
+  detectedWith: string;
   /** `boxesKey` of the boxes last exported successfully. */
   exportedKey: string | null;
   /** The files the last export wrote for this scan (saved with the project). */
@@ -109,6 +112,8 @@ export const state = reactive({
   cropsScope: "scan" as "scan" | "all",
   scans: [] as ScanItem[],
   selectedId: null as number | null,
+  /** The picture the person is looking at: the box selected on the scan, or the one opened in the Crops view. */
+  picked: null as { scanId: number; boxId: number } | null,
   settings: { ...defaultSettings } as AppSettings,
   detect: { active: false, done: 0, total: 0 },
   exporting: { active: false, done: 0, total: 0 },
@@ -129,6 +134,10 @@ export const state = reactive({
 export type FeatureName = "photo-details";
 
 export const hasFeature = (name: FeatureName): boolean => state.features.includes(name);
+
+export function pickBox(scanId: number, boxId: number) {
+  state.picked = { scanId, boxId };
+}
 
 export const selectedScan = computed(() => state.scans.find((s) => s.id === state.selectedId) ?? null);
 export const approvedCount = computed(() => state.scans.filter((s) => s.status === "approved").length);
@@ -223,7 +232,7 @@ async function settleDetected(scan: ScanItem) {
   scan.status = scan.flags.length ? "flagged" : state.settings.autoApprove ? "approved" : "pending";
 }
 
-function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis) {
+function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis, settingsKey: string) {
   // A scan detected before is being detected again: its old boxes stay one undo away.
   const detectedBefore = scan.width > 0;
   scan.width = analysis.width;
@@ -235,13 +244,14 @@ function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis) {
     analysis.turned.flatMap((i) => (scan.boxes[i] ? [[scan.boxes[i].id, autoTurnedMark(scan.boxes[i])] as const] : [])),
   );
   scan.detectedKey = boxesKey(scan.boxes);
+  scan.detectedWith = settingsKey;
   scan.error = null;
   scan.revision++;
   refreshPairs(scan);
   return settleDetected(scan);
 }
 
-function handleDetectEvent(batch: ScanItem[], event: DetectEvent) {
+function handleDetectEvent(batch: ScanItem[], event: DetectEvent, settingsKey: string) {
   const scan = batch[event.index];
   if (!scan) return;
   switch (event.event) {
@@ -250,7 +260,7 @@ function handleDetectEvent(batch: ScanItem[], event: DetectEvent) {
       break;
     case "finished":
       state.detect.done++;
-      void applyAnalysis(scan, event.analysis);
+      void applyAnalysis(scan, event.analysis, settingsKey);
       break;
     case "failed":
       state.detect.done++;
@@ -273,10 +283,13 @@ async function runDetection(items: ScanItem[]) {
   try {
     while (waiting.length) {
       const batch = waiting.shift()!;
+      // The settings as they are when the request goes out: a change while it runs makes these scans out of date.
+      const settings = detectSettings();
+      const settingsKey = detectKey(settings);
       await api.detectScans(
         batch.map((s) => s.path),
-        detectSettings(),
-        (event) => handleDetectEvent(batch, event),
+        settings,
+        (event) => handleDetectEvent(batch, event, settingsKey),
       );
     }
   } catch (e) {
@@ -326,6 +339,7 @@ function makeScan(path: string): ScanItem {
     history: new History<BoxItem[]>(),
     epoch: 0,
     detectedKey: "",
+    detectedWith: "",
     exportedKey: null,
     exportedFiles: [],
     backsOn: null,
@@ -381,12 +395,23 @@ export async function addFolderFromDialog() {
 export async function redetect(scan: ScanItem) {
   scan.status = "detecting";
   try {
-    await applyAnalysis(scan, await api.detectOne(scan.path, detectSettings()));
+    const settings = detectSettings();
+    await applyAnalysis(scan, await api.detectOne(scan.path, settings), detectKey(settings));
   } catch (e) {
     scan.status = "error";
     scan.error = errorText(e);
   }
 }
+
+/** The scan was found with other detection settings than the ones now chosen, and has not been fixed by hand since. */
+export function needsRedetect(scan: ScanItem): boolean {
+  return isOutOfDate(
+    { status: scan.status, detectedWith: scan.detectedWith, detectedKey: scan.detectedKey, boxesKey: boxesKey(scan.boxes) },
+    detectKey(detectSettings()),
+  );
+}
+
+export const outOfDateScans = computed(() => state.scans.filter(needsRedetect));
 
 /** After changing detection settings: detect every scan again. */
 export function redetectAll() {

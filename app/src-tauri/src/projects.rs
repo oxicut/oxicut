@@ -66,6 +66,8 @@ pub struct ScanRecord {
     pub boxes: Vec<BoxDto>,
     /// `boxesKey` of what detection produced, to tell whether the user changed anything.
     pub detected_key: String,
+    /// The detection settings the scan was found with, as the screen writes them; empty when not known.
+    pub detected_with: String,
     /// `boxesKey` of the boxes last exported successfully.
     pub exported_key: Option<String>,
     /// The files the last export wrote for this scan.
@@ -337,6 +339,7 @@ mod tests {
                 angle: 3.5,
             }],
             detected_key: "500,350,300,200,3.5".into(),
+            detected_with: "[\"v7-lite\",2,80,0,\"card\",true]".into(),
             exported_key: Some("500,350,300,200,3.5".into()),
             exported_files: vec!["D:/out/a-1.tif".into()],
             backs_on: Some(7),
@@ -419,6 +422,7 @@ mod tests {
         assert_eq!(project.scans[0].details, DetailsRecord::default());
         assert!(project.scans[0].crop_details.is_empty());
         assert!(project.scans[0].auto_turned.is_empty());
+        assert_eq!(project.scans[0].detected_with, "");
         assert_eq!(project.format_version, 0);
     }
 

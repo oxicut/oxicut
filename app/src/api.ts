@@ -221,6 +221,8 @@ export interface ScanRecord {
   status: string;
   boxes: Box[];
   detectedKey: string;
+  /** The detection settings the scan was found with (see `detectKey`); empty when not known. */
+  detectedWith?: string;
   exportedKey: string | null;
   /** The files the last export wrote for this scan. */
   exportedFiles: string[];

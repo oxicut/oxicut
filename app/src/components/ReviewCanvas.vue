@@ -14,7 +14,19 @@ import ViewSwitch from "./ViewSwitch.vue";
 import { resizeBox, type SizeChange } from "../cropSize";
 import { describeSuggestion } from "../suggestions";
 import type { Box } from "../api";
-import { FLAG_LABELS, detectSettings, newBoxId, previewFor, resizeCrop, suggestCuts, type BoxItem, type ScanItem } from "../store";
+import {
+  FLAG_LABELS,
+  detectSettings,
+  needsRedetect,
+  newBoxId,
+  previewFor,
+  resizeCrop,
+  selectScan,
+  state,
+  suggestCuts,
+  type BoxItem,
+  type ScanItem,
+} from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
 const emit = defineEmits<{
@@ -51,6 +63,8 @@ const ids = new WeakMap<object, number>();
 /** The scan is decoded and boxes exist (or are known to be none). */
 const ready = computed(() => !!props.scan && props.scan.width > 0 && props.scan.status !== "error");
 const busyDetecting = computed(() => props.scan?.status === "queued" || props.scan?.status === "detecting");
+/** The scan was found with other settings than the ones now chosen. */
+const outOfDate = computed(() => !!props.scan && needsRedetect(props.scan));
 const flagMessages = computed(() => {
   const seen = new Set<string>();
   return (props.scan?.flags ?? []).filter((f) => !seen.has(f.code) && seen.add(f.code)).map((f) => FLAG_LABELS[f.code]);
@@ -65,6 +79,8 @@ function syncState() {
   hasSelection.value = (canvas?.getActiveObjects() ?? []).some((o) => ids.has(o));
   const [target] = selectedMarquees();
   selectedId.value = target ? (ids.get(target) ?? null) : null;
+  // Tell the Crops view which picture this is.
+  state.picked = props.scan && selectedId.value !== null ? { scanId: props.scan.id, boxId: selectedId.value } : null;
   const scan = props.scan;
   const box = target && { cx: target.left, cy: target.top, w: target.width * target.scaleX, h: target.height * target.scaleY, angle: target.angle };
   canCloser.value = !!(box && scan && resizeBox(box, "closer", scan));
@@ -301,6 +317,34 @@ function applyBoxes() {
   syncState();
 }
 
+// ------------------------------------------------- back from the Crops view
+
+/** A picture chosen in the Crops view that belongs to a scan the canvas has not shown yet. */
+let wantedPick: { scanId: number; boxId: number } | null = null;
+
+/** Select the box the person was looking at in the Crops view, once its scan is on the canvas. */
+function selectWanted() {
+  const wanted = wantedPick;
+  if (!canvas || !wanted || wanted.scanId !== props.scan?.id) return;
+  wantedPick = null;
+  const marquee = marquees().find((m) => ids.get(m) === wanted.boxId);
+  if (marquee && selectedMarquees()[0] !== marquee) {
+    canvas.setActiveObject(marquee);
+    canvas.requestRenderAll();
+  }
+}
+
+watch(
+  () => state.view,
+  (view) => {
+    const picked = state.picked;
+    if (view !== "scan" || !picked) return;
+    wantedPick = { ...picked };
+    if (picked.scanId !== props.scan?.id) selectScan(picked.scanId);
+    else selectWanted();
+  },
+);
+
 // ------------------------------------------------------------ another cut
 
 /** The other cuts on offer for one box, and the box as it was before the first was shown. */
@@ -470,6 +514,7 @@ async function rebuild() {
     for (const box of scan.boxes) canvas.add(makeMarquee(box));
     syncState();
     fit();
+    selectWanted();
   } catch (e) {
     if (token === buildToken) loadError.value = `Could not show this scan: ${e instanceof Error ? e.message : e}`;
   } finally {
@@ -735,8 +780,18 @@ watch(() => props.scan?.flags, restyle, { deep: true });
         <button class="btn" :disabled="!scan?.history.canRedo" title="Redo (Ctrl+Y or Ctrl+Shift+Z)" @click="emit('redo')">
           Redo
         </button>
-        <button class="btn" :disabled="!scan || busyDetecting" title="Run detection on this scan again" @click="emit('redetect')">
-          Re-detect
+        <button
+          class="btn"
+          :class="{ attention: outOfDate }"
+          :disabled="!scan || busyDetecting"
+          :title="
+            outOfDate
+              ? 'The detection settings changed since this scan was found. Run detection again with them.'
+              : 'Run detection on this scan again'
+          "
+          @click="emit('redetect')"
+        >
+          {{ outOfDate ? "Re-detect with new settings" : "Re-detect" }}
         </button>
       </div>
       <div class="grow"></div>
