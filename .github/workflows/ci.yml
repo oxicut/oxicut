@@ -106,14 +106,14 @@ jobs:
         with:
           components: clippy
 
-      # What is cached is the output of the three steps below (check, build and test each leave their own),
-      # and the cache is only written when the key is new. So the key includes this file: change a step and
-      # the next run on main makes a complete cache, instead of the old, smaller one matching for ever.
+      # What is cached is the output of the three steps below (check, build and test each leave their own).
+      # The cache is only written when its name is new, so after adding or changing a step here, change the
+      # name once by hand (windows-ci, windows-ci-2, ...): the next run on main then makes a complete cache.
+      # (The action ignores its `key` input when `shared-key` is set, so a hash of this file would not help.)
       # Pull requests only read it (they would each write a copy nobody else can use).
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: windows-ci
-          key: ${{ hashFiles('.github/workflows/ci.yml') }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
 
