@@ -12,7 +12,9 @@ import {
 } from "../loupe";
 import ViewSwitch from "./ViewSwitch.vue";
 import { resizeBox, type SizeChange } from "../cropSize";
-import { FLAG_LABELS, newBoxId, previewFor, resizeCrop, type BoxItem, type ScanItem } from "../store";
+import { describeSuggestion } from "../suggestions";
+import type { Box } from "../api";
+import { FLAG_LABELS, newBoxId, previewFor, resizeCrop, suggestCuts, type BoxItem, type ScanItem } from "../store";
 
 const props = defineProps<{ scan: ScanItem | null; keysEnabled: boolean }>();
 const emit = defineEmits<{
@@ -33,6 +35,7 @@ const loading = ref(false);
 const loadError = ref("");
 const boxCount = ref(0);
 const hasSelection = ref(false);
+const selectedId = ref<number | null>(null);
 // Whether the selected box can be cut closer or wider (the buttons grey out at the limits).
 const canCloser = ref(false);
 const canWider = ref(false);
@@ -61,10 +64,12 @@ function syncState() {
   boxCount.value = marquees().length;
   hasSelection.value = (canvas?.getActiveObjects() ?? []).some((o) => ids.has(o));
   const [target] = selectedMarquees();
+  selectedId.value = target ? (ids.get(target) ?? null) : null;
   const scan = props.scan;
   const box = target && { cx: target.left, cy: target.top, w: target.width * target.scaleX, h: target.height * target.scaleY, angle: target.angle };
   canCloser.value = !!(box && scan && resizeBox(box, "closer", scan));
   canWider.value = !!(box && scan && resizeBox(box, "wider", scan));
+  lookForCuts();
 }
 
 /** Line thickness that stays about 2.5 screen pixels at any zoom. */
@@ -106,6 +111,9 @@ const normaliseAngle = (a: number) => ((((a + 180) % 360) + 360) % 360) - 180;
 /** Read the boxes back off the canvas and tell the store. */
 function commit() {
   if (!props.scan) return;
+  // Any edit made by hand while a cut is shown keeps what is on the canvas.
+  cut.value = null;
+  cutMessage.value = "";
   const boxes = marquees().map((o) => {
     // Fold the drag-resize scale into the size so it stays a plain rectangle.
     const w = Math.max(10, o.width * o.scaleX);
@@ -281,6 +289,7 @@ let transforming = false;
 /** Show other boxes (after undo or redo) without reloading the image. Keeps the selection if the box survives. */
 function applyBoxes() {
   if (!canvas || !props.scan || !previewImage || transforming) return;
+  cut.value = null;
   const selected = selectedMarquees().map((m) => ids.get(m));
   canvas.discardActiveObject();
   canvas.remove(...marquees());
@@ -290,6 +299,121 @@ function applyBoxes() {
   if (keep) canvas.setActiveObject(keep);
   restyle();
   syncState();
+}
+
+// ------------------------------------------------------------ another cut
+
+/** The other cuts on offer for one box, and the box as it was before the first was shown. */
+const cut = ref<{ id: number; original: Box; choices: Box[]; index: number } | null>(null);
+const cutBusy = ref(false);
+const cutMessage = ref("");
+let cutToken = 0;
+
+/** The other cuts found for the selected box without being asked, so the button can say there are some. */
+const found = ref<{ id: number; key: string; choices: Box[] } | null>(null);
+/** The quiet lookup is waiting or running: the button pulses. */
+const looking = ref(false);
+let lookupTimer: number | undefined;
+let lookupToken = 0;
+const boxKey = (b: Box) => [b.cx, b.cy, b.w, b.h, b.angle].map((v) => Math.round(v * 10) / 10).join(",");
+
+function selectedBox(): { id: number; box: Box } | null {
+  const [target] = selectedMarquees();
+  const id = target && ids.get(target);
+  if (id === undefined || !target) return null;
+  return { id, box: { cx: target.left, cy: target.top, w: target.width * target.scaleX, h: target.height * target.scaleY, angle: normaliseAngle(target.angle) } };
+}
+
+/** Look (quietly, after a short pause) for other cuts of the selected box. */
+function lookForCuts() {
+  if (cut.value) return;
+  window.clearTimeout(lookupTimer);
+  const token = ++lookupToken;
+  const picked = selectedBox();
+  const scan = props.scan;
+  if (found.value && (!picked || found.value.id !== picked.id || found.value.key !== boxKey(picked.box))) found.value = null;
+  looking.value = false;
+  if (!picked || !scan || !ready.value || busyDetecting.value || scan.missing) return;
+  if (found.value) return;
+  looking.value = true;
+  lookupTimer = window.setTimeout(async () => {
+    const choices = await suggestCuts(scan, picked.box, true);
+    // A newer lookup has taken over (and owns the pulse), or the person moved on.
+    if (token !== lookupToken) return;
+    looking.value = false;
+    const now = selectedBox();
+    if (props.scan !== scan || !choices || !now || now.id !== picked.id || cut.value) return;
+    found.value = { id: picked.id, key: boxKey(picked.box), choices };
+  }, 300);
+}
+
+/** How many other cuts are known for the selected box (null while not known). */
+const cutsKnown = computed(() => (found.value && found.value.id === selectedId.value ? found.value.choices.length : null));
+
+const cutText = computed(() =>
+  cut.value
+    ? `Another cut, ${cut.value.index + 1} of ${cut.value.choices.length}: ${describeSuggestion(cut.value.original, cut.value.choices[cut.value.index])}`
+    : "",
+);
+
+function setMarquee(id: number, box: Box) {
+  const target = marquees().find((m) => ids.get(m) === id);
+  if (!target) return;
+  target.set({ left: box.cx, top: box.cy, width: box.w, height: box.h, scaleX: 1, scaleY: 1, angle: box.angle });
+  target.setCoords();
+  canvas?.requestRenderAll();
+}
+
+function showCut(index: number) {
+  const open = cut.value;
+  if (!open) return;
+  const count = open.choices.length;
+  open.index = ((index % count) + count) % count;
+  setMarquee(open.id, open.choices[open.index]);
+}
+
+/** Put the box back as it was and close the bar. */
+function cancelCut() {
+  cutToken++;
+  cutMessage.value = "";
+  const open = cut.value;
+  cut.value = null;
+  if (open) setMarquee(open.id, open.original);
+}
+
+/** Keep the cut that is shown: the box on the canvas already has it, so it is committed like any edit. */
+function useCut() {
+  if (!cut.value) return;
+  cut.value = null;
+  commit();
+}
+
+async function tryAnotherCut() {
+  const scan = props.scan;
+  const [target] = selectedMarquees();
+  const id = target && ids.get(target);
+  if (!scan || id === undefined || cutBusy.value) return;
+  cancelCut();
+  const original: Box = { cx: target.left, cy: target.top, w: target.width * target.scaleX, h: target.height * target.scaleY, angle: normaliseAngle(target.angle) };
+  const token = ++cutToken;
+  // Already looked for in the background: no waiting.
+  const known = found.value && found.value.id === id && found.value.key === boxKey(original) ? found.value.choices : null;
+  let choices = known;
+  if (!choices) {
+    cutBusy.value = true;
+    choices = await suggestCuts(scan, original);
+    cutBusy.value = false;
+  }
+  // The person moved on while the search ran.
+  const [now] = selectedMarquees();
+  if (token !== cutToken || props.scan !== scan || !now || ids.get(now) !== id) return;
+  if (choices === null) return;
+  if (!choices.length) {
+    cutMessage.value = "No other way to cut this picture was found.";
+    return;
+  }
+  cut.value = { id, original, choices, index: 0 };
+  showCut(0);
 }
 
 /** True while the view is the "fit to window" one; a manual zoom or pan clears it. */
@@ -454,6 +578,10 @@ function onKey(event: KeyboardEvent) {
     case "ArrowLeft":
       emit("step", -1);
       break;
+    case "Escape":
+      if (!cut.value) return;
+      cancelCut();
+      break;
     case "Delete":
     case "Backspace":
       deleteSelected();
@@ -473,6 +601,10 @@ onMounted(() => {
     preserveObjectStacking: true,
   });
 
+  canvas.on("selection:cleared", cancelCut);
+  canvas.on("selection:updated", (e) => {
+    if (cut.value && e.selected[0] && ids.get(e.selected[0]) !== cut.value.id) cancelCut();
+  });
   canvas.on("selection:created", (e) => {
     // One box at a time: a multi-selection would move boxes as a group.
     if (e.selected.length > 1) canvas!.setActiveObject(e.selected[0]);
@@ -572,7 +704,11 @@ onBeforeUnmount(() => {
 });
 
 // Rebuild when another scan is chosen or detection replaced its boxes.
-watch(() => [props.scan?.id, props.scan?.revision, props.scan?.width], () => void rebuild());
+watch(() => [props.scan?.id, props.scan?.revision, props.scan?.width], () => {
+  cut.value = null;
+  cutMessage.value = "";
+  void rebuild();
+});
 // Undo or redo put other boxes back.
 watch(() => props.scan?.epoch, applyBoxes);
 // Re-colour boxes as warnings come and go.
@@ -629,6 +765,26 @@ watch(() => props.scan?.flags, restyle, { deep: true });
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" /><path d="M12 6V2M10 3.5l2-2 2 2M12 18v4M10 20.5l2 2 2-2M6 12H2M3.5 10l-2 2 2 2M18 12h4M20.5 10l2 2-2 2" /></svg>
           Wider
         </button>
+        <span class="sep" aria-hidden="true"></span>
+        <button
+          class="tool"
+          :class="{ looking: looking && hasSelection }"
+          :disabled="!hasSelection || cutBusy || busyDetecting || !cutsKnown"
+          :title="
+            !hasSelection
+              ? 'Select a picture to see other ways to cut it'
+              : cutsKnown === null
+                ? 'Looking for other ways to cut the selected picture...'
+                : cutsKnown === 0
+                  ? 'No other way to cut this picture was found'
+                  : `Show the ${cutsKnown} other ${cutsKnown === 1 ? 'way' : 'ways'} to cut the selected picture`
+          "
+          @click="tryAnotherCut"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="6" width="11" height="9" rx="1" /><rect x="9" y="10" width="11" height="9" rx="1" /></svg>
+          Another cut
+          <span v-if="cutsKnown" class="count" aria-hidden="true">{{ cutsKnown }}</span>
+        </button>
       </nav>
 
       <div ref="host" class="stage">
@@ -643,6 +799,23 @@ watch(() => props.scan?.flags, restyle, { deep: true });
           :style="{ width: `${loupeSize}px`, height: `${loupeSize}px` }"
           aria-hidden="true"
         ></canvas>
+        <div v-if="cutBusy || cut || cutMessage" class="cutbar" role="status">
+          <template v-if="cutBusy">
+            <span class="spinner" aria-hidden="true"></span>
+            <span>Looking for other ways to cut this picture…</span>
+          </template>
+          <template v-else-if="cut">
+            <strong>{{ cutText }}</strong>
+            <button v-if="cut.choices.length > 1" class="btn" @click="showCut(cut.index - 1)">Previous</button>
+            <button v-if="cut.choices.length > 1" class="btn" @click="showCut(cut.index + 1)">Next</button>
+            <button class="btn primary" @click="useCut">Use this</button>
+            <button class="btn" @click="cancelCut">Cancel <kbd>Esc</kbd></button>
+          </template>
+          <template v-else>
+            <span>{{ cutMessage }}</span>
+            <button class="btn" @click="cutMessage = ''">OK</button>
+          </template>
+        </div>
         <div v-if="!scan" class="overlay">
           <strong>No scans yet</strong>
           <span>Drop scans or a folder here, or use <em>Add scans…</em></span>
@@ -756,6 +929,67 @@ watch(() => props.scan?.flags, restyle, { deep: true });
   bottom: 12px;
   right: 12px;
 }
+.tool.looking:disabled {
+  animation: looking 1.1s ease-in-out infinite;
+}
+@keyframes looking {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.tool .count {
+  position: absolute;
+  top: 2px;
+  right: 6px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  animation: badge-in 0.2s ease-out;
+}
+@keyframes badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tool .count,
+  .tool.looking:disabled {
+    animation: none;
+  }
+}
+.cutbar {
+  position: absolute;
+  z-index: 6;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 24px);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
 .overlay {
   position: absolute;
   inset: 0;
@@ -774,9 +1008,14 @@ watch(() => props.scan?.flags, restyle, { deep: true });
 }
 .overlay.error {
   pointer-events: auto;
+  background: color-mix(in srgb, var(--stage) 90%, transparent);
 }
 .overlay.error strong {
   color: var(--warn);
+}
+.overlay.error span {
+  max-width: 34rem;
+  color: var(--text);
 }
 .overlay.light {
   background: color-mix(in srgb, var(--stage) 70%, transparent);

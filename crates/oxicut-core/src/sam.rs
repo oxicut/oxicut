@@ -27,12 +27,17 @@ fn rt(error: impl std::fmt::Display) -> SamError {
     SamError::Runtime(error.to_string())
 }
 
-/// ONNX Runtime allows one environment per process.
-fn environment() -> Result<&'static Environment, SamError> {
+/// ONNX Runtime allows one environment per process, so every model (MobileSAM, the orientation model)
+/// has to share this one: a second `ort::init().build()` fails with "only one environment is allowed".
+pub(crate) fn shared_environment() -> Result<&'static Environment, String> {
     static ENV: OnceLock<Result<Environment, String>> = OnceLock::new();
     ENV.get_or_init(|| ort::init().build().map_err(|e| e.to_string()))
         .as_ref()
-        .map_err(|e| SamError::Runtime(e.clone()))
+        .map_err(|e| e.clone())
+}
+
+fn environment() -> Result<&'static Environment, SamError> {
+    shared_environment().map_err(SamError::Runtime)
 }
 
 pub struct MobileSam {

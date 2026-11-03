@@ -144,6 +144,9 @@ export const detectScans = (paths: string[], settings: DetectSettings, onEvent: 
 export const cancelDetection = () => invoke<void>("cancel_detection");
 export const detectOne = (path: string, settings: DetectSettings) =>
   invoke<ScanAnalysis>("detect_one", { path, settings });
+/** Other ways to cut the picture `current` is on, best first (empty when there are none). */
+export const suggestBoxes = (path: string, settings: DetectSettings, current: Box) =>
+  invoke<Box[]>("suggest_boxes", { path, settings, current });
 export const getThumbnail = (path: string) => invoke<string>("get_thumbnail", { path });
 /** One straightened crop for the Crops view: a small picture and the size the exported file will have. */
 export interface CropImage {

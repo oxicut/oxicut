@@ -7,7 +7,7 @@
 //! combined answer carries a confidence, and a crop the model is not sure about is left as it is.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 use image::{GrayImage, RgbImage, imageops};
 use ort::environment::Environment;
@@ -120,12 +120,9 @@ pub fn turned(image: &RgbImage, quarters: u8) -> RgbImage {
     }
 }
 
-/// ONNX Runtime allows one environment per process.
+/// The one ONNX Runtime environment of the process, shared with MobileSAM (see `sam::shared_environment`).
 fn environment() -> Result<&'static Environment, OrientError> {
-    static ENV: OnceLock<Result<Environment, String>> = OnceLock::new();
-    ENV.get_or_init(|| ort::init().build().map_err(|e| e.to_string()))
-        .as_ref()
-        .map_err(|e| OrientError::Runtime(e.clone()))
+    crate::sam::shared_environment().map_err(OrientError::Runtime)
 }
 
 pub struct OrientationModel {
