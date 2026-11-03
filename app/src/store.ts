@@ -153,7 +153,7 @@ const withId = (box: Box): BoxItem => ({ ...box, id: nextBoxId++ });
 export const newBoxId = () => nextBoxId++;
 const errorText = (e: unknown) => (typeof e === "string" ? e : e instanceof Error ? e.message : String(e));
 
-function detectSettings(): api.DetectSettings {
+export function detectSettings(): api.DetectSettings {
   const s = state.settings;
   return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx, cutTo: s.cutTo, autoOrient: s.autoOrient };
 }
@@ -414,6 +414,16 @@ export function updateBoxes(scan: ScanItem, boxes: BoxItem[]) {
 function editFromCrops(scan: ScanItem, boxes: BoxItem[]) {
   updateBoxes(scan, boxes);
   scan.epoch++;
+}
+
+/** Other ways to cut the picture `box` is on, best first. `null` when the search failed (said on screen unless `quiet`). */
+export async function suggestCuts(scan: ScanItem, box: api.Box, quiet = false): Promise<api.Box[] | null> {
+  try {
+    return await api.suggestBoxes(scan.path, detectSettings(), box);
+  } catch (e) {
+    if (!quiet) say(`Could not look for other ways to cut this picture: ${errorText(e)}`);
+    return null;
+  }
 }
 
 /** Turn the crop of one box a quarter turn; the box on the scan looks the same but the exported picture is turned. */

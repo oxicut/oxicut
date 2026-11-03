@@ -75,6 +75,16 @@ Add a scan where some pictures lie sideways or upside down (the Detection tab sw
 - close the app and open it again: the turns and marks are still there;
 - switch the setting off and re-detect: the pictures come out as found, nothing turned.
 
+## Another cut for one picture
+
+Select one picture on the canvas. The **Another cut** button (left column, under Wider) pulses while the app looks for other ways to cut it, then either turns active with a small count or stays grey. Press it: a bar at the top of the canvas names the cut ("Another cut, 1 of 3: cuts wider") and the box on the canvas changes; **Previous** and **Next** step through them. Check:
+
+- **Use this** keeps the shown cut as one undo step (*Undo* brings the old box back); **Cancel**, **Esc** and selecting another picture put the old box back;
+- with *Only the picture* chosen under **Cut around**, a postcard's box offers the whole card, and with the whole card chosen it offers the picture only;
+- a picture that was turned (by you or automatically) keeps its turn in every suggestion;
+- with the full v7 chosen and the models downloaded, the first lookup on a scan takes a few seconds and the next picture on the same scan is quick;
+- with "reduce motion" on in Windows, the button does not pulse and the count does not fade in.
+
 ## Fronts and backs
 
 Scan the fronts of some postcards, then turn the stack over and scan the backs. Add both scans, open the **Crops** view on the scan of the fronts and choose **Backs are on another scan…**. Check:

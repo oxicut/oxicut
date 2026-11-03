@@ -39,6 +39,7 @@ pub mod sam;
 pub mod score;
 pub mod snap;
 pub mod split;
+pub mod suggest;
 pub mod tighten;
 pub mod v5;
 pub mod v7;

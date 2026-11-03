@@ -143,6 +143,18 @@ async fn detect_one(
     .map_err(|e| e.to_string())?
 }
 
+/// Other ways to cut the picture a box is on (the "Try another cut" button).
+#[tauri::command]
+async fn suggest_boxes(
+    path: String,
+    settings: DetectSettings,
+    current: engine::BoxDto,
+) -> Result<Vec<engine::BoxDto>, String> {
+    tauri::async_runtime::spawn_blocking(move || engine::suggest_boxes(&PathBuf::from(path), &settings, current))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// The screen-sized preview of a scan, as a data URL.
 #[tauri::command]
 async fn get_preview(path: String, state: State<'_, AppState>) -> Result<String, String> {
@@ -307,6 +319,7 @@ pub fn run() {
             detect_scans,
             cancel_detection,
             detect_one,
+            suggest_boxes,
             get_preview,
             evaluate_flags,
             export_scans,

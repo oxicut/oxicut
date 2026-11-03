@@ -21,15 +21,15 @@ use crate::v5;
 /// Long side of the grey working image tightening reads (`_WORK_MAX`).
 pub const WORK_MAX: u32 = 2000;
 /// Tightening passes (`passes=2`).
-const PASSES: usize = 2;
+pub(crate) const PASSES: usize = 2;
 /// Cap on the colour threshold of v7's second v3 pass.
-const CAPPED_COLOR_THRESHOLD: f32 = 30.0;
+pub(crate) const CAPPED_COLOR_THRESHOLD: f32 = 30.0;
 /// Long side of the grey copy the ghost statistics read.
 const GHOST_SIDE: u32 = 1500;
 
 /// v3's rectangles in full-resolution pixels, within the area limits
 /// (`_v3_rects` with no colour cap).
-fn v3_proposals(
+pub(crate) fn v3_proposals(
     detection: &Detection,
     source: &RgbImage,
     options: &DetectOptions,
@@ -166,7 +166,7 @@ pub fn detect_v7(
 }
 
 /// `cv2.GaussianBlur(gray, (0, 0), sigma)` on the working image.
-fn blurred(gray: &GrayF32, sigma: f64) -> GrayF32 {
+pub(crate) fn blurred(gray: &GrayF32, sigma: f64) -> GrayF32 {
     GrayF32 {
         width: gray.width,
         height: gray.height,

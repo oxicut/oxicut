@@ -19,6 +19,7 @@ use oxicut_core::geometry::RotatedRect;
 use oxicut_core::io::{load_image, to_detection_rgb};
 use oxicut_core::orient::{MIN_CONFIDENCE, turn_rect, with_orientation};
 use oxicut_core::resize::resize_area;
+use oxicut_core::suggest::{Proposal, proposals, suggestions_for};
 use oxicut_core::v7::{detect_v7, detect_v7_lite};
 use serde::{Deserialize, Serialize};
 
@@ -311,7 +312,90 @@ fn detect_full_v7(rgb: &image::RgbImage, options: &DetectOptions) -> Result<Dete
     oxicut_core::sam::with_thread_sam(&encoder, &decoder, |sam| detect_v7(rgb, options, sam))
         .and_then(|result| result)
         .map(|(detection, _)| detection)
-        .map_err(|e| e.to_string())
+        // The reason goes in plain words; the engine's own text is for developers.
+        .map_err(|_| {
+            "The careful way of finding pictures (v7) could not start. Try again, or choose another detector in the Detection tab.".to_string()
+        })
+}
+
+/// The most other ways to cut one picture that are offered.
+const MOST_SUGGESTIONS: usize = 6;
+/// How many scans' candidate boxes are kept in memory, so the next picture on the same scan answers at once.
+const KEPT_SCANS: usize = 3;
+
+/// The candidate boxes of a scan (see `oxicut_core::suggest`) with the scan's size, by what they depend on.
+type KeptProposals = Vec<(String, (u32, u32), Vec<Proposal>)>;
+static KEPT: std::sync::Mutex<KeptProposals> = std::sync::Mutex::new(Vec::new());
+
+/// What the candidates of this scan depend on: the file, how it was last changed, and the settings that
+/// decide which boxes are found (the trim is applied later, so changing it does not need a new search).
+fn proposals_key(path: &Path, settings: &DetectSettings, with_models: bool) -> String {
+    let stamp = std::fs::metadata(path)
+        .ok()
+        .map(|m| (m.len(), m.modified().ok()))
+        .unwrap_or_default();
+    format!(
+        "{}|{stamp:?}|{:?}|{}|{}|{with_models}",
+        path.display(),
+        settings.cut_to,
+        settings.min_area_percent,
+        settings.max_area_percent
+    )
+}
+
+/// Other ways to cut the picture `current` is on, best first, for the "Try another cut" button. Works
+/// out every candidate of the scan once (a few seconds with the full v7) and keeps them for the next call.
+pub fn suggest_boxes(path: &Path, settings: &DetectSettings, current: BoxDto) -> Result<Vec<BoxDto>, String> {
+    let models = (settings.mode == Detector::V7)
+        .then(|| {
+            let dir = oxicut_models::models_dir().ok()?;
+            let encoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_ENCODER);
+            let decoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_DECODER);
+            (encoder.is_file() && decoder.is_file()).then_some((encoder, decoder))
+        })
+        .flatten();
+    let key = proposals_key(path, settings, models.is_some());
+    let options = settings.options();
+
+    let kept = KEPT
+        .lock()
+        .ok()
+        .and_then(|k| k.iter().find(|(k, _, _)| *k == key).map(|(_, size, found)| (*size, found.clone())));
+    let ((width, height), found) = match kept {
+        Some(hit) => hit,
+        None => {
+            let name = file_name(path);
+            let image = load_image(path).map_err(|e| format!("Could not read {name}: {e}"))?;
+            let rgb = to_detection_rgb(&image);
+            drop(image);
+            let found = match &models {
+                Some((encoder, decoder)) => {
+                    oxicut_core::sam::with_thread_sam(encoder, decoder, |sam| proposals(&rgb, &options, Some(sam)))
+                        .and_then(|result| result)
+                }
+                None => proposals(&rgb, &options, None),
+            }
+            .map_err(|e| e.to_string())?;
+            let size = rgb.dimensions();
+            if let Ok(mut kept) = KEPT.lock() {
+                kept.retain(|(k, _, _)| *k != key);
+                kept.insert(0, (key, size, found.clone()));
+                kept.truncate(KEPT_SCANS);
+            }
+            (size, found)
+        }
+    };
+    let current = RotatedRect::new(current.cx, current.cy, current.w, current.h, current.angle);
+    Ok(suggestions_for(&current, &found, &options, width, height, MOST_SUGGESTIONS)
+        .into_iter()
+        .map(|r| BoxDto {
+            cx: r.cx,
+            cy: r.cy,
+            w: r.w,
+            h: r.h,
+            angle: r.angle,
+        })
+        .collect())
 }
 
 /// Turn every box whose crop `quarters_needed` says is not upright (the number of quarter turns clockwise, 0
@@ -611,6 +695,36 @@ mod tests {
         assert_eq!((after.w, after.h), (before.h, before.w));
         assert_eq!((after.cx, after.cy), (before.cx, before.cy));
         assert_eq!(analysis.boxes[1], plain.boxes[1]);
+    }
+
+    #[test]
+    fn other_cuts_are_offered_for_the_picture_asked_about_only() {
+        let dir = scratch("suggest");
+        let scan = dir.join("scan.png");
+        write_scan(&scan);
+        let settings = DetectSettings {
+            inset_px: 0,
+            ..Default::default()
+        };
+        let found = analyze_scan(&scan, &settings, &dir.join("cache")).unwrap();
+        assert_eq!(found.boxes.len(), 2);
+        let asked = found.boxes[0];
+        // Cut a little too wide by hand: the closer cut the detector found is on offer.
+        let wide = BoxDto {
+            w: asked.w + 40.0,
+            h: asked.h + 40.0,
+            ..asked
+        };
+        let offered = suggest_boxes(&scan, &settings, wide).unwrap();
+        assert!(!offered.is_empty() && offered.len() <= MOST_SUGGESTIONS, "{offered:?}");
+        for b in &offered {
+            // Around the first picture (centre near x 280), never the second (x 730).
+            assert!((b.cx - asked.cx).abs() < 60.0 && (b.cy - asked.cy).abs() < 60.0, "{b:?} against {asked:?}");
+        }
+        assert!(offered.iter().any(|b| (b.w - asked.w).abs() < 8.0 && (b.h - asked.h).abs() < 8.0), "{offered:?}");
+        // The second question on the same scan is answered from memory.
+        let again = suggest_boxes(&scan, &settings, wide).unwrap();
+        assert_eq!(offered, again);
     }
 
     #[test]

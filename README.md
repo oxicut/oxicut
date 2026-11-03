@@ -15,7 +15,7 @@ Scan a whole pile of photos at once, and let OxiCut cut them apart. Put several 
 - **Finds the pictures for you.** It also copes with crooked prints, white borders and zigzag edges, and cuts postcards whole, margins and all (or only the picture, if you prefer).
 - **Straightens every picture** and saves it as its own file, at the full quality of your scan.
 - **Lets you check first.** Scans where nothing looks wrong are approved by themselves. The ones that need a look wait for you.
-- **Easy to fix.** Move, resize or turn a frame, add one that was missed, split two pictures that were found as one, or make a crop a little closer or wider. A magnifier follows the corner you are working on.
+- **Easy to fix.** Move, resize or turn a frame, add one that was missed, split two pictures that were found as one, try another way the app found to cut a picture, or make a crop a little closer or wider. A magnifier follows the corner you are working on.
 - **Turns pictures the right way up.** Sideways and upside-down prints are turned for you while they are found (a one-time download of a helper file, offered when you switch it on), and one click turns any other.
 - **Puts fronts and backs together.** Scan the postcards, turn the stack over and scan the backs. OxiCut matches each front with its back and saves them as a pair, named `-front` and `-back`.
 - **Keeps your details.** The resolution, colour profile and photo dates of your scan go into every picture.
@@ -79,6 +79,7 @@ How closely the port follows the original, and every place it deviates, is writt
 - **Models stay out of the app.** They are downloaded once, from a pinned revision, checked against a SHA-256 and kept in `%APPDATA%\oxicut\models`, shared by the app and the command line. A damaged or truncated file is detected and fetched again. The welcome dialog offers the download (about 45 MB) on first run; until then everything else works.
 - **Crops come from the original pixels.** Each crop is sampled straight from the full-resolution scan in one step, in the scan's own bit depth, so a 16-bit TIFF stays 16-bit. Output can be the scan's own format, JPEG, PNG or TIFF.
 - **The scan's metadata comes along.** Resolution (DPI), colour profile and EXIF are written into the crops in every format, so a 600 dpi scan gives 600 dpi crops. The scan's embedded thumbnail and pixel-size fields are dropped, since they describe the whole scan. Each crop can also say `OxiCut 0.0.1` in its Software field (a separate option, on by default).
+- **Other cuts for one picture.** The detectors make several candidate boxes for every print and keep only the best; OxiCut keeps the runners-up and offers them on request (**Another cut**), which ScanSplitter does not.
 - **A review workflow built for batches.** Scans with nothing suspicious are approved automatically; the ones flagged (nothing found, touches the scan edge, unusual shape, overlapping boxes) wait for you. Rotatable, resizable boxes on a Fabric.js canvas, undo and redo per scan, loupes on every handle and, while a box is moved or rotated, in all four of its corners. Projects are `.oxicut` files (small JSON files in the OxiCut folder in Documents).
 
 **What ScanSplitter has that OxiCut does not (yet)**
