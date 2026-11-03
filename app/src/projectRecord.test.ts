@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cropDetailsFromRecords, fromRecord, nextIdAfter, pairsFromPositions, projectKey, restoreStatus, toProjectFile, toRecord } from "./projectRecord.ts";
+import { autoTurnedFromPositions, autoTurnedMark, cropDetailsFromRecords, fromRecord, nextIdAfter, pairsFromPositions, projectKey, restoreStatus, toProjectFile, toRecord } from "./projectRecord.ts";
 
 const scan = {
   id: 4,
@@ -17,6 +17,7 @@ const scan = {
   pairs: [],
   details: { date: "", place: "", caption: "", people: [] as string[] },
   cropDetails: {} as Record<number, { date: string; place: string; caption: string; people: string[] }>,
+  autoTurned: {} as Record<number, string>,
   error: null,
 };
 
@@ -128,4 +129,18 @@ test("a record from before details existed opens with none, and editing details 
   assert.deepEqual(old.details, { date: "", place: "", caption: "", people: [] });
   assert.deepEqual(old.cropDetailRecords, []);
   assert.notEqual(projectKey([scan]), projectKey([{ ...scan, details: { date: "", place: "Balaton", caption: "", people: [] } }]));
+});
+
+test("pictures turned automatically are saved by position, and only while they are as the turn left them", () => {
+  const box = (id: number, angle: number) => ({ cx: id, cy: id, w: 3, h: 2, angle, id });
+  const boxes = [box(10, 0), box(11, 90), box(12, 0)];
+  const turned = { ...scan, boxes, autoTurned: { 11: autoTurnedMark(boxes[1]), 12: autoTurnedMark(box(12, 90)) } };
+  // Box 12 was turned again by hand since, so it no longer carries the mark.
+  const record = toRecord(turned);
+  assert.deepEqual(record.autoTurned, [1]);
+  const back = fromRecord(JSON.parse(JSON.stringify(record)));
+  assert.deepEqual(back.autoTurnedPositions, [1]);
+  assert.deepEqual(autoTurnedFromPositions(back.autoTurnedPositions, boxes), { 11: autoTurnedMark(boxes[1]) });
+  assert.deepEqual(autoTurnedFromPositions([7], boxes), {});
+  assert.deepEqual(fromRecord({ id: 1, path: "x.png" }).autoTurnedPositions, []);
 });

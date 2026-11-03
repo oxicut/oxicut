@@ -4,6 +4,7 @@ import * as api from "../api";
 import { boxesKey } from "../closeGuard";
 import { baseName } from "../cropNames";
 import { detailsLine } from "../details";
+import { autoTurnedMark } from "../projectRecord";
 import {
   backsOf,
   cropPlansFor,
@@ -98,6 +99,7 @@ interface Card extends LightboxItem {
   about: string;
   /** The picture has details of its own, beyond its scan's. */
   ownDetails: boolean;
+  autoTurned: boolean;
 }
 
 /** The picture of one box of another scan, if it has been cut. */
@@ -137,6 +139,7 @@ const cards = computed<Card[]>(() =>
         name: written ?? planned,
         chosenName: plan.chosenName,
         about: hasFeature("photo-details") ? detailsLine(detailsFor(scan, box.id)) : "",
+        autoTurned: scan.autoTurned[box.id] === autoTurnedMark(box),
         ownDetails: hasFeature("photo-details") && !!scan.cropDetails[box.id],
         role: plan.role,
         partner,
@@ -241,7 +244,10 @@ function showInFolder(card: Card) {
           <div class="meta">
             <strong class="name" :title="card.name">{{ card.name }}</strong>
             <span v-if="state.cropsScope === 'all'" class="muted small" :title="card.scan.path">from {{ card.scan.name }}</span>
-            <span class="muted small">{{ card.width }} × {{ card.height }} px</span>
+            <span class="size">
+              <span class="muted small">{{ card.width }} × {{ card.height }} px</span>
+              <span v-if="card.autoTurned" class="chip" title="Turned the right way up automatically. Left and Right turn it back.">Turned</span>
+            </span>
             <span v-if="card.about" class="muted small about" :title="card.about">{{ card.about }}</span>
             <span v-if="card.role" class="chip accent">{{ card.role === "front" ? "Front" : "Back" }}</span>
             <span v-if="card.exported" class="chip ok">Exported</span>
@@ -436,6 +442,11 @@ function showInFolder(card: Card) {
 }
 .small {
   font-size: 12px;
+}
+.size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .about {
   max-width: 100%;

@@ -30,8 +30,10 @@ const v7Ready = () =>
   state.models.filter((m) => m.id.startsWith("mobilesam")).length > 0 &&
   state.models.filter((m) => m.id.startsWith("mobilesam")).every((m) => m.state === "ready");
 
-// The orientation model is not offered yet, so it must not keep the button around.
+// The button in the Models tab fetches the MobileSAM pair; the orientation helper has its own Download line.
 const modelNeedsDownload = () => state.models.some((m) => m.id !== "orientation" && m.state !== "ready");
+const orientationModel = () => state.models.find((m) => m.id === "orientation");
+const orientationMissing = () => (orientationModel()?.state ?? "ready") !== "ready";
 const downloading = () => Object.keys(state.modelProgress).length > 0;
 
 function percent(id: string): number {
@@ -163,6 +165,21 @@ const openModelsFolder =() =>
         For postcards and prints with a margin, choose the whole card. Choose only the picture to leave a white border out.
       </p>
       <label class="check">
+        <input v-model="state.settings.autoOrient" type="checkbox" />
+        Turn pictures the right way up
+      </label>
+      <div v-if="state.settings.autoOrient && orientationMissing()" class="muted note">
+        <template v-if="'orientation' in state.modelProgress">
+          Getting the helper that tells which way up a picture is...
+          <div class="bar"><div :style="{ width: `${percent('orientation')}%` }"></div></div>
+        </template>
+        <template v-else>
+          This needs a one-time download ({{ formatBytes(orientationModel()?.approxBytes ?? 0) }}).
+          <button class="btn" :disabled="downloading()" @click="downloadModels(['orientation'])">Download</button>
+          <p v-if="state.modelErrors['orientation']" class="error-text">{{ state.modelErrors["orientation"] }}</p>
+        </template>
+      </div>
+      <label class="check">
         <input v-model="state.settings.autoApprove" type="checkbox" />
         Approve scans with nothing to flag automatically
       </label>
@@ -274,7 +291,7 @@ const openModelsFolder =() =>
           <div class="muted small">{{ m.usedBy }} · {{ formatBytes(m.sizeBytes ?? m.approxBytes) }}</div>
           <div v-if="m.id in state.modelProgress" class="bar"><div :style="{ width: `${percent(m.id)}%` }"></div></div>
           <p v-if="state.modelErrors[m.id]" class="error-text">{{ state.modelErrors[m.id] }}</p>
-          <div v-if="!(m.id in state.modelProgress) && m.state !== 'ready' && m.id !== 'orientation'" class="row">
+          <div v-if="!(m.id in state.modelProgress) && m.state !== 'ready'" class="row">
             <button class="btn" :disabled="downloading()" @click="downloadModels([m.id])">
               {{ m.state === "corrupt" ? "Download again" : "Download" }}
             </button>

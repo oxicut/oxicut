@@ -58,18 +58,17 @@ pub static MOBILESAM_DECODER: ModelSpec<'static> = ModelSpec {
     approx_bytes: 16_501_323,
 };
 
-/// Used by a later phase to tell which way is up; registered now so the
-/// download machinery is the same for every model.
+/// Tells which way up a picture is (EfficientNetV2 classifier, by Duarte Barbosa).
 pub static ORIENTATION: ModelSpec<'static> = ModelSpec {
     id: "orientation",
-    label: "Orientation model",
+    label: "Orientation helper",
     filename: "orientation_model_v2.onnx",
     urls: &[
         "https://github.com/duartebarbosadev/deep-image-orientation-detection/releases/download/v2/orientation_model_v2_0.9882.onnx",
         "https://github.com/Madnex/ScanSplitter/releases/download/models-v1/orientation_model_v2.onnx",
     ],
     sha256: "cffe911c1dff47fbfbbd90110aaab9c07134645c460d35b3ae8832079bea91ba",
-    approx_bytes: 80_000_000,
+    approx_bytes: 80_578_424,
 };
 
 /// Every registered model.

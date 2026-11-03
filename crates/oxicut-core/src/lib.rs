@@ -31,6 +31,7 @@ pub mod kmeans;
 pub mod mask;
 pub mod merge;
 pub mod metadata;
+pub mod orient;
 pub mod pil;
 pub mod refine;
 pub mod resize;

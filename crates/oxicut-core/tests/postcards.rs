@@ -84,3 +84,62 @@ fn eight_cream_cards_on_a_white_lid_are_cut_whole() {
         assert!(overlap >= 0.8, "{name}: mean overlap with the hand-fixed cards is {overlap:.2}");
     }
 }
+
+fn orientation_model() -> Option<PathBuf> {
+    let dir = std::env::var_os("OXICUT_MODELS_DIR")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("oxicut").join("models")))?;
+    let path = dir.join("orientation_model_v2.onnx");
+    path.is_file().then_some(path)
+}
+
+/// Each hand-fixed card, cut as OxiCut cuts it, turned all four ways: the combined answer must put it right,
+/// and above all must never turn an upright card (the model alone does, for two of these eight).
+#[test]
+fn postcards_are_turned_the_right_way_up_and_never_the_wrong_way() {
+    use oxicut_core::crop::crop_region;
+    use oxicut_core::orient::{MIN_CONFIDENCE, OrientationModel, turned};
+
+    let root = workspace_root();
+    let (scan, truth) = (root.join(SCAN), root.join(TRUTH));
+    let Some(model) = orientation_model() else {
+        eprintln!("skipping: the orientation model is not downloaded");
+        return;
+    };
+    if !scan.is_file() || !truth.is_file() {
+        eprintln!("skipping: reference/postcards is not there");
+        return;
+    }
+    let text = std::fs::read_to_string(truth).unwrap();
+    let project: Project = serde_json::from_str(text.trim_start_matches('\u{feff}')).unwrap();
+    let image = oxicut_core::io::load_image(&scan).unwrap();
+    let mut model = OrientationModel::load(&model).unwrap();
+
+    let (mut right, mut total, mut confident_mistakes) = (0, 0, Vec::new());
+    for (index, b) in project.scans[0].boxes.iter().enumerate() {
+        let crop = crop_region(&image, &RotatedRect::new(b.cx, b.cy, b.w, b.h, b.angle)).unwrap().to_rgb8();
+        // The hand-fixed boxes mark where the cards are, not which way up: the last card lies on its side there.
+        let upright = if index == 7 { turned(&crop, 1) } else { crop.clone() };
+        for turn in 0..4u8 {
+            let answer = model.classify(&turned(&upright, turn)).unwrap();
+            total += 1;
+            let wanted = (4 - turn) % 4;
+            if answer.quarter_turns == wanted {
+                right += 1;
+            } else if answer.confidence >= MIN_CONFIDENCE {
+                confident_mistakes.push(format!("card {} turned {}: said {} at {:.2}", index + 1, turn * 90, answer.quarter_turns, answer.confidence));
+            }
+            // The cards that are upright must be left alone, whatever the model thinks.
+            if turn == 0 {
+                assert_eq!(answer.decided(MIN_CONFIDENCE), 0, "card {} is upright: {answer:?}", index + 1);
+            }
+        }
+        // The sideways card as it was cut: the combined answer turns it a quarter clockwise.
+        if index == 7 {
+            assert_eq!(model.classify(&crop).unwrap().decided(MIN_CONFIDENCE), 1, "the sideways card");
+        }
+    }
+    eprintln!("right {right} of {total}; mistakes the threshold lets through: {confident_mistakes:?}");
+    assert!(right >= 28, "right {right} of {total}");
+    assert!(confident_mistakes.is_empty(), "{confident_mistakes:?}");
+}

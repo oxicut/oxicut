@@ -34,6 +34,8 @@ export interface ScanAnalysis {
   width: number;
   height: number;
   boxes: Box[];
+  /** Positions of the boxes that were turned the right way up automatically. */
+  turned: number[];
   thumbnail: string;
   millis: number;
 }
@@ -49,6 +51,8 @@ export interface DetectSettings {
   maxAreaPercent: number;
   insetPx: number;
   cutTo: CutAround;
+  /** Turn pictures that are sideways or upside down the right way up as they are found. */
+  autoOrient: boolean;
 }
 
 /** A project used lately, with what the Projects list shows (kept up to date as it is saved). */
@@ -225,6 +229,8 @@ export interface ScanRecord {
   details?: SavedDetails;
   /** Pictures with details of their own (an empty field means "use the scan's"), by position in `boxes`. */
   cropDetails?: ({ index: number } & SavedDetails)[];
+  /** Pictures turned the right way up automatically and not touched since, by position in `boxes`. */
+  autoTurned?: number[];
   error: string | null;
 }
 

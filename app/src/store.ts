@@ -2,6 +2,8 @@
 
 import { computed, reactive, watch } from "vue";
 import {
+  autoTurnedFromPositions,
+  autoTurnedMark,
   cropDetailsFromRecords,
   fromRecord,
   nextIdAfter,
@@ -57,6 +59,8 @@ export interface ScanItem {
   details: Details;
   /** Pictures with details of their own, by box id; an empty field means "use the scan's" (saved by position). */
   cropDetails: Record<number, Details>;
+  /** Pictures turned the right way up automatically, by box id; the mark only counts while the box is unchanged (saved by position). */
+  autoTurned: Record<number, string>;
   /** What the last export of this scan cost in this session: milliseconds, and the size of each file. Not saved. */
   exportStats: { millis: number; sizes: number[] } | null;
   /** The scan file could not be found when the project was opened (moved or deleted). Not saved. */
@@ -83,6 +87,7 @@ export const defaultSettings: AppSettings = {
   maxAreaPercent: 80,
   insetPx: 0,
   cutTo: "card",
+  autoOrient: true,
   features: [],
   format: "same",
   jpegQuality: 92,
@@ -150,7 +155,7 @@ const errorText = (e: unknown) => (typeof e === "string" ? e : e instanceof Erro
 
 function detectSettings(): api.DetectSettings {
   const s = state.settings;
-  return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx, cutTo: s.cutTo };
+  return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx, cutTo: s.cutTo, autoOrient: s.autoOrient };
 }
 
 // ---------------------------------------------------------------- settings
@@ -226,6 +231,9 @@ function applyAnalysis(scan: ScanItem, analysis: api.ScanAnalysis) {
   scan.thumbnail = analysis.thumbnail;
   if (detectedBefore) scan.history.record(snapshot(scan.boxes));
   scan.boxes = analysis.boxes.map(withId);
+  scan.autoTurned = Object.fromEntries(
+    analysis.turned.flatMap((i) => (scan.boxes[i] ? [[scan.boxes[i].id, autoTurnedMark(scan.boxes[i])] as const] : [])),
+  );
   scan.detectedKey = boxesKey(scan.boxes);
   scan.error = null;
   scan.revision++;
@@ -324,6 +332,7 @@ function makeScan(path: string): ScanItem {
     pairs: [],
     details: noDetails(),
     cropDetails: {},
+    autoTurned: {},
     exportStats: null,
     missing: false,
   };
@@ -835,10 +844,10 @@ export function forgetProject(path: string) {
 }
 
 function restoreScan(
-  saved: SavedScan & { status: RestoredStatus; pairPositions?: [number, number][]; cropDetailRecords?: unknown },
+  saved: SavedScan & { status: RestoredStatus; pairPositions?: [number, number][]; cropDetailRecords?: unknown; autoTurnedPositions?: number[] },
   missing: boolean,
 ): ScanItem {
-  const { pairPositions: _positions, cropDetailRecords: _records, ...rest } = saved;
+  const { pairPositions: _positions, cropDetailRecords: _records, autoTurnedPositions: _turned, ...rest } = saved;
   return {
     ...rest,
     boxes: saved.boxes.map(withId),
@@ -908,6 +917,7 @@ export async function openProject(path: string): Promise<boolean> {
       const front = state.scans[index];
       if (!front) continue;
       front.cropDetails = cropDetailsFromRecords(saved.cropDetailRecords, front.boxes);
+      front.autoTurned = autoTurnedFromPositions(saved.autoTurnedPositions, front.boxes);
       const backs = saved.backsOn === null ? undefined : state.scans.find((s) => s.id === saved.backsOn);
       if (!backs || backs.id === front.id) {
         front.backsOn = null;

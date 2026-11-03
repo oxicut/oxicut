@@ -79,6 +79,8 @@ pub struct ScanRecord {
     pub details: DetailsRecord,
     /// Pictures that have details of their own, which win over the scan's.
     pub crop_details: Vec<CropDetailsRecord>,
+    /// Pictures turned the right way up automatically and not touched since, by position in the box list.
+    pub auto_turned: Vec<usize>,
     pub error: Option<String>,
 }
 
@@ -352,6 +354,7 @@ mod tests {
                     ..Default::default()
                 },
             }],
+            auto_turned: vec![0],
             ..Default::default()
         }
     }
@@ -415,6 +418,7 @@ mod tests {
         assert_eq!((project.scans[0].backs_on, project.scans[0].pairs.len()), (None, 0));
         assert_eq!(project.scans[0].details, DetailsRecord::default());
         assert!(project.scans[0].crop_details.is_empty());
+        assert!(project.scans[0].auto_turned.is_empty());
         assert_eq!(project.format_version, 0);
     }
 

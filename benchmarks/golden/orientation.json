@@ -1,0 +1,364 @@
+{
+ "cases": [
+  {
+   "picture": "benchmarks/fixtures/scansplitter-03-tape-and-photo-corners.jpg",
+   "clockwise": 0,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.9229598641395569,
+    0.025756902992725372,
+    0.025145281106233597,
+    0.026137825101614
+   ],
+   "answer": 0
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-03-tape-and-photo-corners.jpg",
+   "clockwise": 90,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.025811225175857544,
+    0.024885164573788643,
+    0.026382705196738243,
+    0.9229208827018738
+   ],
+   "answer": 3
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-03-tape-and-photo-corners.jpg",
+   "clockwise": 180,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.024232538416981697,
+    0.02454999089241028,
+    0.9261285066604614,
+    0.025089001283049583
+   ],
+   "answer": 2
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-03-tape-and-photo-corners.jpg",
+   "clockwise": 270,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.02579181268811226,
+    0.9233857989311218,
+    0.025701172649860382,
+    0.025121258571743965
+   ],
+   "answer": 1
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-05-narrow-mounted-gutters.jpg",
+   "clockwise": 0,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.922319233417511,
+    0.02673894539475441,
+    0.02519070729613304,
+    0.025751102715730667
+   ],
+   "answer": 0
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-05-narrow-mounted-gutters.jpg",
+   "clockwise": 90,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.02554844506084919,
+    0.02461651712656021,
+    0.02616054192185402,
+    0.9236745238304138
+   ],
+   "answer": 3
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-05-narrow-mounted-gutters.jpg",
+   "clockwise": 180,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.024770671501755714,
+    0.025388823822140694,
+    0.9235817790031433,
+    0.02625873312354088
+   ],
+   "answer": 2
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-05-narrow-mounted-gutters.jpg",
+   "clockwise": 270,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.025340458378195763,
+    0.9250117540359497,
+    0.025384847074747086,
+    0.024262983351945877
+   ],
+   "answer": 1
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-10-irregular-real-world-layout.jpg",
+   "clockwise": 0,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.924437940120697,
+    0.0255694929510355,
+    0.024360841140151024,
+    0.025631695985794067
+   ],
+   "answer": 0
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-10-irregular-real-world-layout.jpg",
+   "clockwise": 90,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.02504703775048256,
+    0.0242875088006258,
+    0.025904783979058266,
+    0.9247606992721558
+   ],
+   "answer": 3
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-10-irregular-real-world-layout.jpg",
+   "clockwise": 180,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.023995626717805862,
+    0.024572297930717468,
+    0.9256507158279419,
+    0.0257812961935997
+   ],
+   "answer": 2
+  },
+  {
+   "picture": "benchmarks/fixtures/scansplitter-10-irregular-real-world-layout.jpg",
+   "clockwise": 270,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.026550013571977615,
+    0.9225755929946899,
+    0.025818930938839912,
+    0.025055421516299248
+   ],
+   "answer": 1
+  },
+  {
+   "picture": "benchmarks/fixtures/album-01-cream-single.jpg",
+   "clockwise": 0,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.9230620861053467,
+    0.02581736259162426,
+    0.025235161185264587,
+    0.025885406881570816
+   ],
+   "answer": 0
+  },
+  {
+   "picture": "benchmarks/fixtures/album-01-cream-single.jpg",
+   "clockwise": 90,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.024540185928344727,
+    0.024596652016043663,
+    0.024429377168416977,
+    0.926433801651001
+   ],
+   "answer": 3
+  },
+  {
+   "picture": "benchmarks/fixtures/album-01-cream-single.jpg",
+   "clockwise": 180,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.024956481531262398,
+    0.024964701384305954,
+    0.9252977967262268,
+    0.024780994281172752
+   ],
+   "answer": 2
+  },
+  {
+   "picture": "benchmarks/fixtures/album-01-cream-single.jpg",
+   "clockwise": 270,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.02560613490641117,
+    0.9231886267662048,
+    0.02620234154164791,
+    0.025002870708703995
+   ],
+   "answer": 1
+  },
+  {
+   "picture": "benchmarks/fixtures/album-05-portrait-page.jpg",
+   "clockwise": 0,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.9240313768386841,
+    0.024976955726742744,
+    0.02536202408373356,
+    0.02562960609793663
+   ],
+   "answer": 0
+  },
+  {
+   "picture": "benchmarks/fixtures/album-05-portrait-page.jpg",
+   "clockwise": 90,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.02422025427222252,
+    0.025360943749547005,
+    0.0246498454362154,
+    0.9257689118385315
+   ],
+   "answer": 3
+  },
+  {
+   "picture": "benchmarks/fixtures/album-05-portrait-page.jpg",
+   "clockwise": 180,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.024490127339959145,
+    0.025456121191382408,
+    0.9241731762886047,
+    0.025880569592118263
+   ],
+   "answer": 2
+  },
+  {
+   "picture": "benchmarks/fixtures/album-05-portrait-page.jpg",
+   "clockwise": 270,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.025108909234404564,
+    0.9232559204101562,
+    0.026085149496793747,
+    0.025550013408064842
+   ],
+   "answer": 1
+  },
+  {
+   "picture": "benchmarks/fixtures/album-09-landscape-single.jpg",
+   "clockwise": 0,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.9222211241722107,
+    0.02619585208594799,
+    0.025766294449567795,
+    0.025816671550273895
+   ],
+   "answer": 0
+  },
+  {
+   "picture": "benchmarks/fixtures/album-09-landscape-single.jpg",
+   "clockwise": 90,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.024696368724107742,
+    0.025253750383853912,
+    0.02504279464483261,
+    0.9250071048736572
+   ],
+   "answer": 3
+  },
+  {
+   "picture": "benchmarks/fixtures/album-09-landscape-single.jpg",
+   "clockwise": 180,
+   "size": [
+    1400,
+    1000
+   ],
+   "probabilities": [
+    0.024514345452189445,
+    0.026360930874943733,
+    0.9232794642448425,
+    0.02584516629576683
+   ],
+   "answer": 2
+  },
+  {
+   "picture": "benchmarks/fixtures/album-09-landscape-single.jpg",
+   "clockwise": 270,
+   "size": [
+    1000,
+    1400
+   ],
+   "probabilities": [
+    0.026350582018494606,
+    0.9206111431121826,
+    0.027084197849035263,
+    0.02595411241054535
+   ],
+   "answer": 1
+  }
+ ]
+}
