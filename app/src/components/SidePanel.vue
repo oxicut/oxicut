@@ -273,8 +273,8 @@ const openModelsFolder =() =>
 
     <div v-else class="body">
       <p class="muted lead">
-        Careful needs some extra files, and turning pictures the right way up needs a helper file. They are optional:
-        Standard works without them. Each is downloaded once, checked to be complete, and kept outside OxiCut's installer.
+        Careful and turning pictures the right way up each need a model, a file that OxiCut downloads once. They are
+        optional: Standard works without them. Each is downloaded once, checked to be complete, and kept outside OxiCut's installer.
       </p>
       <ul class="models">
         <li v-for="m in state.models" :key="m.id" class="model">

@@ -68,7 +68,7 @@ Scan postcards on the white lid (cream, tan and white cards, a few touching the 
 
 ## Pictures that lie the wrong way
 
-Add a scan where some pictures lie sideways or upside down (the Detection tab switch **Turn pictures the right way up** is on by default). Without the helper file the switch says it needs a one-time download and offers a **Download** button; the Downloads tab lists the same file as "Picture-turning helper". After the download, press *Re-detect all*. Check:
+Add a scan where some pictures lie sideways or upside down (the Detection tab switch **Turn pictures the right way up** is on by default). Without the helper file the switch says it needs a one-time download and offers a **Download** button; the Downloads tab lists the same file as "Orientation model". After the download, press *Re-detect all*. Check:
 
 - sideways and upside-down pictures come out upright in the Crops view with a small **Turned** mark beside the size; pictures that were already upright are left alone, and an unclear one (abstract art) is left as it was rather than guessed;
 - Left or Right on a turned picture removes its mark; *Undo* on the canvas brings the turn back;

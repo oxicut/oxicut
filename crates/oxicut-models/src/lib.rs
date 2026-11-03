@@ -61,7 +61,7 @@ pub static MOBILESAM_DECODER: ModelSpec<'static> = ModelSpec {
 /// Tells which way up a picture is (EfficientNetV2 classifier, by Duarte Barbosa).
 pub static ORIENTATION: ModelSpec<'static> = ModelSpec {
     id: "orientation",
-    label: "Orientation helper",
+    label: "Orientation model",
     filename: "orientation_model_v2.onnx",
     urls: &[
         "https://github.com/duartebarbosadev/deep-image-orientation-detection/releases/download/v2/orientation_model_v2_0.9882.onnx",

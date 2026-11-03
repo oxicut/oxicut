@@ -9,7 +9,7 @@ The first full version. OxiCut cuts a scan of several photos or postcards apart 
 ### Added
 
 **Detection: finding the pictures on a scan**
-- **Three detection methods:** **Basic**, **Standard** (the default; it also trims white borders so the box sits on the photograph) and **Careful** (the most accurate, and the best at counting prints). Careful needs some extra files, about 45 MB, downloaded once. OxiCut offers them the first time you start it, and in the **Downloads** tab. The technical names (v3, v7-lite and v7) stay in brackets.
+- **Three detection methods:** **Basic**, **Standard** (the default; it also trims white borders so the box sits on the photograph) and **Careful** (the most accurate, and the best at counting prints). Careful needs two model files, about 45 MB in all, downloaded once. OxiCut offers them the first time you start it, and in the **Downloads** tab. The technical names (v3, v7-lite and v7) stay in brackets.
 - **Whole postcards.** A card on a white scanner lid is cut out whole, margins and all. In the Detection tab, *Cut around* lets you choose *Only the picture* instead.
 - **Settings for what counts as a picture:** the smallest and largest print, and how much to trim from each side.
 - **Pictures turned the right way up for you.** Sideways and upside-down pictures are turned during detection. This needs a one-time download of a helper file (about 80 MB), offered when you switch it on in the Detection tab. Turned pictures say **Turned** in the Crops view, and Left or Right turns one back.

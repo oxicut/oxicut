@@ -19,19 +19,10 @@ pub struct ModelStatusDto {
     pub used_by: String,
 }
 
-/// The name people read in the Downloads tab (the registry's own labels are the technical ones).
-fn plain_label(spec: &ModelSpec) -> &'static str {
-    match spec.id {
-        "mobilesam-encoder" => "Files for Careful, part 1 of 2",
-        "mobilesam-decoder" => "Files for Careful, part 2 of 2",
-        _ => "Picture-turning helper",
-    }
-}
-
 fn used_by(spec: &ModelSpec) -> &'static str {
     match spec.id {
-        "mobilesam-encoder" | "mobilesam-decoder" => "Needed by Careful (v7)",
-        _ => "Turns pictures the right way up",
+        "mobilesam-encoder" | "mobilesam-decoder" => "Required by the Careful (v7) detection method.",
+        _ => "Required for turning the pictures automatically.",
     }
 }
 
@@ -46,7 +37,7 @@ pub fn statuses(dir: &Path) -> Result<Vec<ModelStatusDto>, String> {
             };
             Ok(ModelStatusDto {
                 id: spec.id.into(),
-                label: plain_label(spec).into(),
+                label: spec.label.into(),
                 filename: spec.filename.into(),
                 approx_bytes: spec.approx_bytes,
                 state: state.into(),
@@ -137,11 +128,11 @@ mod tests {
             (encoder.state.as_str(), encoder.size_bytes),
             ("corrupt", Some(12))
         );
-        assert!(encoder.used_by.contains("v7"));
-        let orientation = after.iter().find(|m| m.id == "orientation").unwrap();
-        assert_eq!(orientation.used_by, "Turns pictures the right way up");
-        assert_eq!(orientation.label, "Picture-turning helper");
-        assert_eq!(encoder.label, "Files for Careful, part 1 of 2");
+                let orientation = after.iter().find(|m| m.id == "orientation").unwrap();
+        assert_eq!(orientation.used_by, "Required for turning the pictures automatically.");
+        assert_eq!(orientation.label, "Orientation model");
+        assert_eq!(encoder.label, "MobileSAM image encoder");
+        assert_eq!(encoder.used_by, "Required by the Careful (v7) detection method.");
     }
 
     #[test]
