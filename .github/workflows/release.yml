@@ -35,6 +35,10 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Building version $version"
 
+      # A release without notes is stopped here, before the long build.
+      - name: Check the changelog
+        run: bash tools/changelog-section.sh "${{ steps.version.outputs.version }}" > /dev/null
+
       - uses: dtolnay/rust-toolchain@stable
 
       # Keep the compiled crates, even from a run that failed later on, so the next run starts warm. This
@@ -116,7 +120,12 @@ jobs:
           gh release delete "$tag" --cleanup-tag --yes || true
           flag=""
           if [ "$PRERELEASE" = "true" ]; then flag="--prerelease"; fi
-          cat > notes.md <<'NOTES'
+          {
+            echo "## What is new"
+            echo
+            bash tools/changelog-section.sh "$VERSION"
+            echo
+            cat <<'NOTES'
           OxiCut cuts scanned photos and postcards apart into separate, straightened pictures.
 
           **To install:** download `OxiCut-setup.exe` below and open it.
@@ -125,4 +134,5 @@ jobs:
           "Windows protected your PC" window. Choose "More info", then "Run anyway". Your scans are
           never changed.
           NOTES
+          } > notes.md
           gh release create "$tag" release/* --target "$GITHUB_SHA" --title "OxiCut $VERSION" --notes-file notes.md $flag

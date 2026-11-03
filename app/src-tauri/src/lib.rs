@@ -9,6 +9,7 @@ mod engine;
 mod models;
 mod projects;
 mod settings;
+mod updates;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -151,6 +152,26 @@ async fn suggest_boxes(
     current: engine::BoxDto,
 ) -> Result<Vec<engine::BoxDto>, String> {
     tauri::async_runtime::spawn_blocking(move || engine::suggest_boxes(&PathBuf::from(path), &settings, current))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The releases published so far, to see whether a newer version exists. Empty when the check is switched off
+/// (in Settings or by `OXICUT_NO_UPDATE_CHECK=1`); an error when GitHub cannot be reached, which the screen ignores.
+#[tauri::command]
+async fn check_for_update() -> Result<Vec<updates::Release>, String> {
+    if !updates::enabled() {
+        return Ok(Vec::new());
+    }
+    tauri::async_runtime::spawn_blocking(|| updates::fetch_releases(&updates::endpoints().0))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The changelog, when the person asks what is new (`None` when there is none yet).
+#[tauri::command]
+async fn whats_new() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| updates::fetch_changelog(&updates::endpoints().1))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -320,6 +341,8 @@ pub fn run() {
             cancel_detection,
             detect_one,
             suggest_boxes,
+            check_for_update,
+            whats_new,
             get_preview,
             evaluate_flags,
             export_scans,

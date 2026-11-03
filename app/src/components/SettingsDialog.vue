@@ -36,6 +36,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
         </div>
       </section>
 
+      <section>
+        <h2>Updates</h2>
+        <label class="check">
+          <input v-model="state.settings.checkForUpdates" type="checkbox" />
+          Look for a newer version when OxiCut starts
+        </label>
+        <p class="muted note">
+          This only asks GitHub for the newest version number and the list of changes. Nothing about you or your scans is sent.
+        </p>
+      </section>
+
       <div class="actions">
         <button class="btn primary" @click="emit('close')">Close</button>
       </div>
@@ -106,6 +117,26 @@ h2 {
 }
 .choice .muted {
   font-size: 12px;
+}
+section + section {
+  margin-top: 1.25rem;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.note {
+  margin: 0.4rem 0 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .actions {
   display: flex;

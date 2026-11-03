@@ -168,6 +168,8 @@ Plan, research and sources: [`docs/distribution-plan.md`](docs/distribution-plan
 - [ ] MSIX packaging job for the Microsoft Store (after the name is reserved in Partner Center).
 - [ ] Website on GitHub Pages: download buttons, three-step guide, FAQ, privacy page, support contact.
 - [ ] Code signing for the direct installer (SignPath Foundation, if eligible).
+- [x] **Version check and what is new**: once at start, in the background, OxiCut asks GitHub for the list of releases; when a newer one exists an arrow appears next to the version (bottom bar and About window) and opens a "What is new" window with the changelog entries since the running build. On by default, one checkbox in Settings turns it off, and it asks nothing else. `CHANGELOG.md` (plain words, kept up to date with every pull request) is read from the repository. See `docs/changelog.md`.
+- [ ] Work through `docs/release-checklist.md` before 0.1.0 (it includes an audit that nothing unfinished or "not yet" faces the user).
 - [ ] Auto-update via the Tauri updater (direct installer only; the Store updates its own).
 - [ ] winget manifest, optional.
 

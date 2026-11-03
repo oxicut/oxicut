@@ -2834,6 +2834,7 @@ dependencies = [
  "oxicut-core",
  "oxicut-models",
  "rayon",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",

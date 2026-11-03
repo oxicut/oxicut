@@ -9,6 +9,8 @@ import CropsView from "./components/CropsView.vue";
 import ReviewCanvas from "./components/ReviewCanvas.vue";
 import ScanQueue from "./components/ScanQueue.vue";
 import AboutDialog from "./components/AboutDialog.vue";
+import UpdateIcon from "./components/UpdateIcon.vue";
+import WhatsNewDialog from "./components/WhatsNewDialog.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
@@ -92,7 +94,7 @@ function onKeydown(event: KeyboardEvent) {
   if (!event.ctrlKey || event.altKey || event.metaKey) return;
   const key = event.key.toLowerCase();
   if (key !== "b" && key !== ",") return;
-  if (showWelcome.value || showClose.value || showProjects.value || showAbout.value) return;
+  if (showWelcome.value || showClose.value || showProjects.value || showAbout.value || state.whatsNewOpen) return;
   const target = event.target as HTMLElement | null;
   if (target && ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName)) return;
   event.preventDefault();
@@ -160,7 +162,7 @@ onBeforeUnmount(() => {
         v-show="state.view === 'scan'"
         class="fill"
         :scan="selectedScan"
-        :keys-enabled="!showWelcome && !showClose && !showSettings && !showProjects && !showAbout && state.view === 'scan'"
+        :keys-enabled="!showWelcome && !showClose && !showSettings && !showProjects && !showAbout && !state.whatsNewOpen && state.view === 'scan'"
         @approve="approveAndAdvance"
         @step="step"
         @edit="selectedScan && updateBoxes(selectedScan, $event)"
@@ -177,7 +179,10 @@ onBeforeUnmount(() => {
       <span class="message">{{ state.notice || "Ready" }}</span>
       <span class="grow"></span>
       <span class="muted">{{ state.scans.length }} {{ state.scans.length === 1 ? "scan" : "scans" }} · {{ approvedCount }} approved</span>
-      <button v-if="state.version" class="btn ghost about" title="About OxiCut" @click="showAbout = true">OxiCut {{ state.version }}</button>
+      <span v-if="state.version" class="about-group">
+        <button class="btn ghost about" title="About OxiCut" @click="showAbout = true">OxiCut {{ state.version }}</button>
+        <UpdateIcon />
+      </span>
       <button class="btn ghost settings" title="Settings (Ctrl+,)" @click="showSettings = true">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="3" />
@@ -196,6 +201,8 @@ onBeforeUnmount(() => {
     <SettingsDialog v-if="showSettings" @close="showSettings = false" />
 
     <AboutDialog v-if="showAbout" @close="showAbout = false" />
+
+    <WhatsNewDialog v-if="state.whatsNewOpen" @close="state.whatsNewOpen = false" />
 
     <ProjectsDialog v-if="showProjects" :start="projectsStart" @close="showProjects = false" />
 
@@ -266,6 +273,12 @@ onBeforeUnmount(() => {
 }
 .about {
   color: var(--muted);
+}
+/* The version and the "newer version" icon read as one thing: only a space between them. */
+.about-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
 }
 .settings svg {
   width: 14px;
