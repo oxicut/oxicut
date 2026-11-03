@@ -1,6 +1,6 @@
 # Trying OxiCut by hand
 
-This is the first version you can use on real scans. It finds prints with the **v7-lite detector** by default (ScanSplitter's v3 plus v7's edge tightening), or with the full **v7 detector** once you download the MobileSAM models (Models tab, about 45 MB); plain v3 can also be chosen in the Detection tab. You can correct the boxes and export the straightened crops. Your original scans are never changed.
+This is the first version you can use on real scans. It finds prints with **Standard (v7-lite)** by default (colour and edges plus tightening onto the photograph's own edge), or with **Careful (v7)** once you download its extra files (Downloads tab, about 45 MB); **Basic (v3)** can also be chosen in the Detection tab. You can correct the boxes and export the straightened crops. Your original scans are never changed.
 
 ## Start it
 
@@ -36,7 +36,7 @@ Close the app before rebuilding: Windows will not replace a running exe.
 
 Things worth checking in particular:
 
-- **Try v7.** Download the models in the Models tab, choose "v7 · most accurate" in the Detection tab, and use *Re-detect all*. It should find prints v7-lite missed (on the test scans: the top-middle print of the tape scan and the second photo of the 16-bit TIFF) and takes a few seconds per scan. Please note any scan where v7 is worse than v7-lite.
+- **Try the Careful (v7) detection method.** Download its files in the Downloads tab, choose "Careful (v7) · most accurate" under *Detection method* in the Detection tab, and use *Re-detect all*. It should find prints v7-lite missed (on the test scans: the top-middle print of the tape scan and the second photo of the 16-bit TIFF) and takes a few seconds per scan. Please note any scan where v7 is worse than v7-lite.
 - A white-bordered print on your white lid: does the box land on the photo or on the paper? v7-lite and v7 should sit on the photo where v3 ran onto the border.
 - A 16-bit TIFF from the Epson: export as *Same as the scan* and open the result. It should still be 16-bit and open in Windows Photos and IrfanView.
 - DPI and EXIF: scan something at 600 dpi, export it, and look at the crop in Windows (right click, Properties, Details). The resolution should read 600 dpi, and with *Write OxiCut into the Software field* ticked the "Program name" should read `OxiCut 0.0.1`. With *Keep DPI, colour profile and EXIF* unticked the crop should lose the dpi, the profile and the EXIF dates, and keep only the Program name. The version is also shown at the bottom right of the window.
@@ -68,7 +68,7 @@ Scan postcards on the white lid (cream, tan and white cards, a few touching the 
 
 ## Pictures that lie the wrong way
 
-Add a scan where some pictures lie sideways or upside down (the Detection tab switch **Turn pictures the right way up** is on by default). Without the helper file the switch says it needs a one-time download and offers a **Download** button; the Models tab lists the same file as "Orientation helper". After the download, press *Re-detect all*. Check:
+Add a scan where some pictures lie sideways or upside down (the Detection tab switch **Turn pictures the right way up** is on by default). Without the helper file the switch says it needs a one-time download and offers a **Download** button; the Downloads tab lists the same file as "Orientation model". After the download, press *Re-detect all*. Check:
 
 - sideways and upside-down pictures come out upright in the Crops view with a small **Turned** mark beside the size; pictures that were already upright are left alone, and an unclear one (abstract art) is left as it was rather than guessed;
 - Left or Right on a turned picture removes its mark; *Undo* on the canvas brings the turn back;

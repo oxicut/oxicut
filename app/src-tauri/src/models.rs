@@ -21,8 +21,8 @@ pub struct ModelStatusDto {
 
 fn used_by(spec: &ModelSpec) -> &'static str {
     match spec.id {
-        "mobilesam-encoder" | "mobilesam-decoder" => "Detectors v5 and v7",
-        _ => "Turns pictures the right way up",
+        "mobilesam-encoder" | "mobilesam-decoder" => "Required by the Careful (v7) detection method.",
+        _ => "Required for turning the pictures automatically.",
     }
 }
 
@@ -128,10 +128,11 @@ mod tests {
             (encoder.state.as_str(), encoder.size_bytes),
             ("corrupt", Some(12))
         );
-        assert!(encoder.used_by.contains("v7"));
-        let orientation = after.iter().find(|m| m.id == "orientation").unwrap();
-        assert_eq!(orientation.used_by, "Turns pictures the right way up");
-        assert_eq!(orientation.label, "Orientation helper");
+                let orientation = after.iter().find(|m| m.id == "orientation").unwrap();
+        assert_eq!(orientation.used_by, "Required for turning the pictures automatically.");
+        assert_eq!(orientation.label, "Orientation model");
+        assert_eq!(encoder.label, "MobileSAM image encoder");
+        assert_eq!(encoder.used_by, "Required by the Careful (v7) detection method.");
     }
 
     #[test]

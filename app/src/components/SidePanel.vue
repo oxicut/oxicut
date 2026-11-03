@@ -18,20 +18,21 @@ import {
 import type { ScanItem } from "../store";
 import { outOfDateScans } from "../store";
 import { layout, togglePanel } from "../layout";
+import { METHODS, methodFor, methodName, methodShort } from "../detectionMethods";
 import DetailsPanel from "./DetailsPanel.vue";
 
-type Tab = "detect" | "details" | "export" | "models";
+type Tab = "detect" | "details" | "export" | "downloads";
 
 // The Details tab is built but switched off for now (docs/feature-flags.md).
 const detailsOn = computed(() => hasFeature("photo-details"));
 const tab = ref<Tab>("detect");
 
-// v7 runs MobileSAM, so it can be chosen once both of its files are on disk.
+// Careful (v7) needs its extra files, so it can be chosen once both are on disk.
 const v7Ready = () =>
   state.models.filter((m) => m.id.startsWith("mobilesam")).length > 0 &&
   state.models.filter((m) => m.id.startsWith("mobilesam")).every((m) => m.state === "ready");
 
-// The button in the Models tab fetches the MobileSAM pair; the orientation helper has its own Download line.
+// The button in the Downloads tab fetches the files for Careful; the picture-turning helper has its own Download line.
 const modelNeedsDownload = () => state.models.some((m) => m.id !== "orientation" && m.state !== "ready");
 const orientationModel = () => state.models.find((m) => m.id === "orientation");
 const orientationMissing = () => (orientationModel()?.state ?? "ready") !== "ready";
@@ -45,7 +46,7 @@ function percent(id: string): number {
   return total ? Math.min(100, (p.downloaded / total) * 100) : 0;
 }
 
-// What the collapsed rail shows: the detector, the output format, and whether the models need attention.
+// What the collapsed rail shows: the detection method, the output format, and whether the downloads need attention.
 const formatLabel = computed(() => ({ same: "Same", jpg: "JPG", png: "PNG", tiff: "TIFF" })[state.settings.format]);
 const modelsMissing = computed(() => state.settings.mode === "v7" && state.models.length > 0 && !v7Ready());
 const downloadLabel = computed(() => {
@@ -73,15 +74,15 @@ function exportSummary(scan: ScanItem): string {
 }
 
 const openModelsFolder =() =>
-  state.modelsFolder && revealInExplorer(state.modelsFolder).catch(() => say("The models folder does not exist yet."));
+  state.modelsFolder && revealInExplorer(state.modelsFolder).catch(() => say("The folder for the downloads does not exist yet."));
 </script>
 
 <template>
   <aside v-if="layout.panelCollapsed" class="panel rail">
     <button class="btn ghost chevron" title="Show the side panel (Ctrl+Shift+B)" aria-label="Show the side panel" @click="togglePanel">«</button>
-    <button class="tool" :aria-pressed="tab === 'detect'" :title="`Detection: ${state.settings.mode}`" @click="showTab('detect')">
+    <button class="tool" :aria-pressed="tab === 'detect'" :title="`Detection: ${methodName(state.settings.mode)}`" @click="showTab('detect')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="8" cy="17" r="2" /></svg>
-      {{ state.settings.mode }}
+      {{ methodShort(state.settings.mode) }}
     </button>
     <button v-if="detailsOn" class="tool" :aria-pressed="tab === 'details'" title="About the pictures: date, place, caption, people" @click="showTab('details')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 9h8M8 13h8M8 17h5" /></svg>
@@ -93,12 +94,12 @@ const openModelsFolder =() =>
     </button>
     <button
       class="tool"
-      :aria-pressed="tab === 'models'"
-      :title="modelsMissing ? 'Models: v7 is selected but its models are missing' : 'Models'"
-      @click="showTab('models')"
+      :aria-pressed="tab === 'downloads'"
+      :title="modelsMissing ? 'Downloads: the Careful (v7) detection method is chosen but its files are missing' : 'Downloads'"
+      @click="showTab('downloads')"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9" /></svg>
-      {{ downloadLabel || "Models" }}
+      {{ downloadLabel || "Downloads" }}
       <span v-if="modelsMissing" class="dot" aria-hidden="true"></span>
     </button>
   </aside>
@@ -108,37 +109,23 @@ const openModelsFolder =() =>
       <button class="tab" role="tab" :aria-selected="tab === 'detect'" @click="tab = 'detect'">Detection</button>
       <button v-if="detailsOn" class="tab" role="tab" :aria-selected="tab === 'details'" @click="tab = 'details'">Details</button>
       <button class="tab" role="tab" :aria-selected="tab === 'export'" @click="tab = 'export'">Export</button>
-      <button class="tab" role="tab" :aria-selected="tab === 'models'" @click="tab = 'models'">Models</button>
+      <button class="tab" role="tab" :aria-selected="tab === 'downloads'" @click="tab = 'downloads'">Downloads</button>
       <button class="tab-toggle" title="Hide the side panel (Ctrl+Shift+B)" aria-label="Hide the side panel" @click="togglePanel">»</button>
     </div>
 
     <div v-if="tab === 'detect'" class="body">
       <label class="field">
-        <span>Detector</span>
+        <span>Detection method</span>
         <select v-model="state.settings.mode">
-          <option value="v7" :disabled="!v7Ready()">
-            v7 · most accurate{{ v7Ready() ? "" : " (download the models first)" }}
+          <option v-for="method in METHODS" :key="method.mode" :value="method.mode" :disabled="method.mode === 'v7' && !v7Ready()">
+            {{ methodName(method.mode) }} · {{ method.mode === "v7" && !v7Ready() ? "download its files first" : method.hint }}
           </option>
-          <option value="v7-lite">v7-lite · v3 plus edge tightening</option>
-          <option value="v3">v3 · colour and edges only</option>
         </select>
       </label>
-      <p class="callout">
-        <template v-if="state.settings.mode === 'v3'">
-          v3 works on colour and edges only. On white-bordered prints the box can run out onto the border or its shadow.
-        </template>
-        <template v-else-if="state.settings.mode === 'v7'">
-          v7 uses the MobileSAM model to find prints, weighs it against colour, edge and texture cues, and moves each side
-          onto the photograph's own edge. It is the most accurate and takes a few seconds per scan.
-        </template>
-        <template v-else>
-          v7-lite takes v3's boxes and moves each side onto the photograph's own edge when it finds a clear border. It can
-          still miss or merge prints; v7 (needs the models) is better at counting them.
-        </template>
-      </p>
+      <p class="callout">{{ methodFor(state.settings.mode)?.about }}</p>
       <p v-if="state.settings.mode === 'v7' && state.models.length && !v7Ready()" class="error-text">
-        The v7 models are missing, so scans will fail with an error.
-        <button class="link" @click="tab = 'models'">Open the Models tab</button> to download them, or pick v7-lite.
+        The files for the Careful (v7) detection method are not downloaded, so scans cannot be detected with it.
+        <button class="link" @click="tab = 'downloads'">Open the Downloads tab</button> to get them, or choose the Standard (v7-lite) detection method.
       </p>
 
       <div class="grid2">
@@ -239,13 +226,13 @@ const openModelsFolder =() =>
           </button>
         </div>
       </div>
-      <label class="check" title="Copies the scan's resolution (DPI), colour profile and EXIF into each image.">
+      <label class="check" title="Copies the scan's resolution, colour profile and photo details (such as the date taken) into each picture.">
         <input v-model="state.settings.keepMetadata" type="checkbox" />
-        Keep DPI, colour profile and EXIF
+        Keep resolution, colours and photo details
       </label>
-      <label class="check" title="Puts “OxiCut” and its version in the Software field of each image (the “Program name” in Windows Properties). With the box above ticked it replaces the scanner's own entry.">
+      <label class="check" title="Writes “OxiCut” and its version into each picture's file details (the “Program name” in Windows Properties). With the box above ticked it replaces the scanner's own entry.">
         <input v-model="state.settings.tagSoftware" type="checkbox" />
-        Write OxiCut into the Software field
+        Note in each picture that OxiCut made it
       </label>
       <p class="muted note">Your scans are never changed, and existing files are never overwritten: a new file gets “ (2)” in its name.</p>
 
@@ -286,8 +273,8 @@ const openModelsFolder =() =>
 
     <div v-else class="body">
       <p class="muted lead">
-        The v7 detector uses the MobileSAM model. It is optional: v7-lite works without it. Models are fetched once,
-        checked against a fixed checksum, and kept outside OxiCut's installer.
+        The Careful (v7) detection method and turning pictures the right way up each need a model, a file that OxiCut downloads once. They are
+        optional: the Standard (v7-lite) detection method works without them. Each is downloaded once, checked to be complete, and kept outside OxiCut's installer.
       </p>
       <ul class="models">
         <li v-for="m in state.models" :key="m.id" class="model">
@@ -314,7 +301,7 @@ const openModelsFolder =() =>
         :disabled="downloading()"
         @click="downloadModels(state.models.filter((m) => m.state !== 'ready' && m.id !== 'orientation').map((m) => m.id))"
       >
-        Download the MobileSAM models
+        Download the Careful (v7) files
       </button>
       <div v-if="state.modelsFolder" class="row">
         <code class="grow path" :title="state.modelsFolder">{{ state.modelsFolder }}</code>

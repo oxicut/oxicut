@@ -8,6 +8,7 @@ Not nerds. Think of someone in middle age or older with a shoebox of prints and 
 
 - **Plain words.** No jargon (no "ONNX", "checksum", "angle", "EXIF", "scratch folder", "cache"). Say what happened and what to do next, in short sentences.
 - **No numbers nobody needs.** Do not show how long something took, byte counts, hashes or internal ids. Show what helps a decision: how many pictures, where they went, what is wrong.
+- **Name things in full.** Never write a bare name as if the reader knew it, such as "Careful needs ..." or "Standard works without ...". Say what kind of thing it is, with its full name: "The **Careful (v7)** detection method needs ...", "the **Downloads** tab", "the **Another cut** button". The same goes for the changelog and the docs a user may read.
 - **Errors are for people.** Explain the problem and the next step; keep OS error codes and raw messages out of the main text.
 - **Reassure where it matters.** Originals are never changed, work is saved automatically, nothing is deleted without asking.
 - Large click targets, clear labels (words over icons), no surprises.

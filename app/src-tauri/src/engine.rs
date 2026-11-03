@@ -306,7 +306,7 @@ fn detect_full_v7(rgb: &image::RgbImage, options: &DetectOptions) -> Result<Dete
     let decoder = oxicut_models::model_path(&dir, &oxicut_models::MOBILESAM_DECODER);
     if !encoder.is_file() || !decoder.is_file() {
         return Err(
-            "The v7 detector needs the MobileSAM models: download them in the Models tab.".into(),
+            "The Careful (v7) detection method needs its extra files: download them in the Downloads tab, or choose the Standard (v7-lite) detection method.".into(),
         );
     }
     oxicut_core::sam::with_thread_sam(&encoder, &decoder, |sam| detect_v7(rgb, options, sam))
@@ -314,7 +314,7 @@ fn detect_full_v7(rgb: &image::RgbImage, options: &DetectOptions) -> Result<Dete
         .map(|(detection, _)| detection)
         // The reason goes in plain words; the engine's own text is for developers.
         .map_err(|_| {
-            "The careful way of finding pictures (v7) could not start. Try again, or choose another detector in the Detection tab.".to_string()
+            "The Careful (v7) detection method could not start. Try again, or choose another detection method in the Detection tab.".to_string()
         })
 }
 

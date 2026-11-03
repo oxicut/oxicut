@@ -34,17 +34,17 @@ async function fetchModels() {
       </ol>
       <div v-if="samModels.length" class="models">
         <template v-if="samReady">
-          <p>The v7 models are on this computer, so the most accurate detector is ready.</p>
+          <p>The files for the Careful (v7) detection method are on this computer, so the most accurate detection is ready.</p>
         </template>
         <template v-else>
           <p>
-            OxiCut works right away with <strong>v7-lite</strong>. For the most accurate detector (<strong>v7</strong>, better at
-            counting prints) it can fetch a model once, about {{ formatBytes(samBytes) }}.
+            OxiCut works right away with the <strong>Standard (v7-lite)</strong> detection method. For the most accurate detection
+            (the <strong>Careful (v7)</strong> method, better at counting prints) it can fetch some extra files once, about {{ formatBytes(samBytes) }}.
           </p>
           <button class="btn" :disabled="downloading" @click="fetchModels">
-            {{ downloading ? `Downloading… ${percent}%` : "Download the v7 models" }}
+            {{ downloading ? `Downloading… ${percent}%` : "Download the Careful (v7) files" }}
           </button>
-          <p v-if="failed" class="error">Could not download: {{ failed }} You can carry on with v7-lite and try again in the Models tab.</p>
+          <p v-if="failed" class="error">Could not download: {{ failed }} You can carry on with the Standard (v7-lite) detection method and try again in the Downloads tab.</p>
         </template>
       </div>
       <div class="actions">

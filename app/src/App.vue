@@ -15,6 +15,7 @@ import SettingsDialog from "./components/SettingsDialog.vue";
 import SidePanel from "./components/SidePanel.vue";
 import WelcomeDialog from "./components/WelcomeDialog.vue";
 import type { StartupArgs } from "./api";
+import { methodName } from "./detectionMethods";
 import { layout, togglePanel, toggleQueue } from "./layout";
 import {
   addPaths,
@@ -143,7 +144,7 @@ onBeforeUnmount(() => {
       <button class="btn ghost project" title="Projects: open, start or rename" @click="openProjects('list')">
         {{ state.project.name || "Project" }} ▾
       </button>
-      <span class="chip">Detector {{ state.settings.mode }}</span>
+      <span class="chip" title="The detection method (change it in the Detection tab)">Detection: {{ methodName(state.settings.mode) }}</span>
       <span class="grow"></span>
       <template v-if="state.detect.active">
         <span class="muted small">Detecting {{ state.detect.done }} of {{ state.detect.total }}…</span>
