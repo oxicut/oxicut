@@ -273,8 +273,9 @@ const openModelsFolder =() =>
 
     <div v-else class="body">
       <p class="muted lead">
-        The Careful (v7) detection method and turning pictures the right way up each need a model, a file that OxiCut downloads once. They are
-        optional: the Standard (v7-lite) detection method works without them. Each is downloaded once, checked to be complete, and kept outside OxiCut's installer.
+        The Careful (v7) detection method and turning pictures the right way up each need a model, a file that OxiCut downloads
+        once and checks for you. They are optional: the Standard (v7-lite) detection method works without them. You might be
+        required to download updated and improved versions of these files in future OxiCut versions.
       </p>
       <ul class="models">
         <li v-for="m in state.models" :key="m.id" class="model">
@@ -285,7 +286,8 @@ const openModelsFolder =() =>
             <span v-else-if="m.state === 'corrupt'" class="chip warn">Damaged</span>
             <span v-else class="chip">Not downloaded</span>
           </div>
-          <div class="muted small">{{ m.usedBy }} · {{ formatBytes(m.sizeBytes ?? m.approxBytes) }}</div>
+          <div class="muted small">{{ m.usedBy }}</div>
+          <div class="muted small">{{ formatBytes(m.sizeBytes ?? m.approxBytes) }}</div>
           <div v-if="m.id in state.modelProgress" class="bar"><div :style="{ width: `${percent(m.id)}%` }"></div></div>
           <p v-if="state.modelErrors[m.id]" class="error-text">{{ state.modelErrors[m.id] }}</p>
           <div v-if="!(m.id in state.modelProgress) && m.state !== 'ready'" class="row">
