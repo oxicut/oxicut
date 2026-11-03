@@ -21,7 +21,7 @@ Scan a whole pile of photos at once, and let OxiCut cut them apart. Put several 
 - **Keeps your details.** The resolution, colour profile and photo dates of your scan go into every picture.
 - **Saves your work by itself.** Close the window any time and OxiCut opens where you stopped. You can keep several projects and open one by double-clicking it.
 - **Never changes your originals,** and never overwrites a file: a new file with the same name gets "(2)" added.
-- **Works without internet.** The two optional downloads are a helper file for the most careful way of finding pictures, offered the first time you start it, and one that turns pictures the right way up, offered when you use that. When it starts, OxiCut also quietly asks GitHub whether a newer version exists (only the newest version number and the list of changes; nothing about you or your scans), which you can switch off in Settings.
+- **Works without internet.** The two optional downloads are a helper file for the most careful detection, offered the first time you start it, and one that turns pictures the right way up, offered when you use that. When it starts, OxiCut also quietly asks GitHub whether a newer version exists (only the newest version number and the list of changes; nothing about you or your scans), which you can switch off in Settings.
 
 ## Download
 

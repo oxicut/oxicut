@@ -82,7 +82,7 @@ pub fn detect_batch(
                 path: path_text.clone(),
             });
             let result = catch_unwind(AssertUnwindSafe(|| analyze_scan(path, settings, cache_dir)))
-                .unwrap_or_else(|_| Err("the detector crashed on this scan".to_string()));
+                .unwrap_or_else(|_| Err("something went wrong while detecting the pictures on this scan".to_string()));
             emit(match result {
                 Ok(analysis) => DetectEvent::Finished { index, analysis },
                 Err(error) => DetectEvent::Failed {

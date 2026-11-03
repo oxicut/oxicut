@@ -891,7 +891,7 @@ watch(() => props.scan?.flags, restyle, { deep: true });
         </div>
         <div v-else-if="busyDetecting || loading" class="overlay light">
           <span class="spinner" aria-hidden="true"></span>
-          <span>{{ busyDetecting ? "Finding the prints…" : "Loading the scan…" }}</span>
+          <span>{{ busyDetecting ? "Detecting the prints…" : "Loading the scan…" }}</span>
         </div>
         <div v-else-if="loadError" class="overlay error">
           <strong>{{ loadError }}</strong>
