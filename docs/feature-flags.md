@@ -37,14 +37,14 @@ With `photo-details` off, a project that holds details (made by someone who had 
 
 1. Add the name to `FeatureName` in `store.ts`.
 2. Guard the interface parts with `hasFeature("name")`, and any code path that writes files or changes what the user's data means.
-3. Add the flag to the table above, and to the roadmap entry of the feature ("built, hidden behind the `name` flag").
+3. Add the flag to the table above, and leave the feature out of `README.md` and `CHANGELOG.md` until it ships.
 4. Test both ways: off (nothing visible, nothing written) and on (`OXICUT_FEATURES`).
 
 Nothing on the Rust side needs a change: any name in the variable or the settings file is passed through.
 
 ## Removing a flag
 
-When the feature ships, delete the checks, the `FeatureName` entry and the table row, and say so in `docs/PROGRESS.md`.
+When the feature ships, delete the checks, the `FeatureName` entry and the table row, and add the feature to `CHANGELOG.md` for the first time.
 
 ## Why there is no library
 

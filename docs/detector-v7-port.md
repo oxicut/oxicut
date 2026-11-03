@@ -4,7 +4,7 @@ Notes on porting ScanSplitter's v3, v5 and v7 detectors to Rust. Record every de
 
 Reference: `reference/ScanSplitter` (scansplitter 0.8.0).
 
-## Corrections to OXICUT_PLAN.md (found reading scansplitter 0.8.0)
+## Corrections to the first plan (found reading scansplitter 0.8.0)
 
 - There is no `detector_v3.py` / `detector_v5.py`. v3, v4 and v5 all live in `src/scansplitter/detector.py`; v7 is `detector_v7.py`. Dispatch is in `detection.py`.
 - v3 detection resolution is **1800 px** long side (`detection_max_dimension=1800`), not ~1500.
@@ -114,7 +114,7 @@ Tightening makes boxes tighter (tightness 85.2% to 88.2%) at unchanged coverage 
 
 ## Full v7 (MobileSAM, v5 anchors, arbitration)
 
-Everything in ScanSplitter's v7 is now ported: `sam.rs` (MobileSAM through `ort`, `_v4_mask_rect`, `_v4_refine_rectangles`), `v5.rs` (texture, frames, combine, stacked-sleeve expansion, boundary recovery), `chroma.rs`, `score.rs` (`_side_contrast`, `_score_rect`, `_edge_sharpness`, `_ghost_stats`, `_select`, `_drop_ghosts`) and `v7::detect_v7`. Results and parity are in `docs/PROGRESS.md`.
+Everything in ScanSplitter's v7 is now ported: `sam.rs` (MobileSAM through `ort`, `_v4_mask_rect`, `_v4_refine_rectangles`), `v5.rs` (texture, frames, combine, stacked-sleeve expansion, boundary recovery), `chroma.rs`, `score.rs` (`_side_contrast`, `_score_rect`, `_edge_sharpness`, `_ghost_stats`, `_select`, `_drop_ghosts`) and `v7::detect_v7`. Results and parity are checked by the golden tests in `crates/oxicut-core/tests/` (`golden_v3.rs`, `golden_v7.rs`, `golden_v7_full.rs`).
 
 Deviations and findings:
 
