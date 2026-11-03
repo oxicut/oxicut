@@ -114,5 +114,5 @@ The skill only files the issue. It does not change code, create branches or open
 - Issues are public. No tokens, credentials, personal paths (use paths relative to the repo), or private scan content. Do not attach or describe family photos; describe what is wrong in general terms or point at a fixture.
 - Write for the project, not for one machine: say what a person sees, in plain words, the way the app would say it. Keep OS error codes and raw logs out of the main text (put a short excerpt under Notes if it helps).
 - If a problem is the same in the Python original (`reference/ScanSplitter`), say so in the issue.
-- Mention only what the repository itself already says publicly. Do not add plans or ideas that are not in the repo's own README, roadmap or docs.
+- Mention only what the repository itself already says publicly. Do not add plans or ideas that are not in the repo's own README, changelog or docs.
 - Never file a duplicate: point at the existing issue instead.

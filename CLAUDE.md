@@ -1,6 +1,6 @@
 # OxiCut
 
-A native Windows app (Tauri 2, Vue 3, Rust engine) that splits flatbed scans of photo prints and postcards into separate, straightened images. A Rust port of ScanSplitter; see `README.md` for the story, `roadmap.md` for what is done and next, `docs/` for notes.
+A native Windows app (Tauri 2, Vue 3, Rust engine) that splits flatbed scans of photo prints and postcards into separate, straightened images. A Rust port of ScanSplitter; see `README.md` for the story, `CHANGELOG.md` for what is new, the issues on GitHub for what is next, `docs/` for notes.
 
 ## Who it is for
 
@@ -20,5 +20,5 @@ Not nerds. Think of someone in middle age or older with a shoebox of prints and 
 - Tests: `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and in `app`: `npm test`, `npm run build`. Build the app with `cd app; cargo tauri build --no-bundle` (close the running app first, it locks the exe).
 - Edit files with the editing tools, not PowerShell `Set-Content` (it breaks UTF-8) and not shell one-liners with backslashes (they get collapsed).
 - Features that are built but not ready for everyone hide behind a flag, off by default (`docs/feature-flags.md`); nothing of them shows in the README, the app or the website while it is off.
-- Keep `docs/TESTING.md`, `docs/PROGRESS.md` and `roadmap.md` in step with what changes. Commit only when asked.
+- Keep `docs/testing.md` in step with what changes. What is left to do lives in GitHub issues, not in a file. Commit only when asked.
 - Keep `CHANGELOG.md` in step (`docs/changelog.md`): every pull request that changes what people see or can do adds a line under *Unreleased*, in plain words like the rest of the app. A release is not made until the changelog has a section for its version, and `docs/release-checklist.md` is worked through first (it includes a check that nothing unfinished or "not yet" faces the user).

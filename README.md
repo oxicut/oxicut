@@ -29,7 +29,7 @@ The installer is on the [Releases page](https://github.com/oxicut/oxicut/release
 
 This is an early test version and the installer is not signed yet, so Windows may show a blue "Windows protected your PC" window. Choose **More info**, then **Run anyway**.
 
-More about OxiCut, in plain words: [oxicut.github.io](https://oxicut.github.io). Progress and plans: [`roadmap.md`](roadmap.md) and [`docs/PROGRESS.md`](docs/PROGRESS.md). Windows only so far.
+More about OxiCut, in plain words: [oxicut.github.io](https://oxicut.github.io). What is new: [`CHANGELOG.md`](CHANGELOG.md). Plans and ideas: the [issues](https://github.com/oxicut/oxicut/issues). Windows only so far.
 
 ## How to use it
 
@@ -48,7 +48,7 @@ More about OxiCut, in plain words: [oxicut.github.io](https://oxicut.github.io).
 | `Ctrl+B`, `Ctrl+Shift+B` | fold the scan list, the settings panel |
 | `Ctrl+,` | settings |
 
-[`docs/TESTING.md`](docs/TESTING.md) is a longer walk through everything worth trying, and what is known to be missing.
+[`docs/testing.md`](docs/testing.md) is a longer walk through everything worth trying, and what is known to be missing.
 
 ## What is not there yet
 
@@ -83,7 +83,7 @@ How closely the port follows the original, and every place it deviates, is writt
 - **A review workflow built for batches.** Scans with nothing suspicious are approved automatically; the ones flagged (nothing found, touches the scan edge, unusual shape, overlapping boxes) wait for you. Rotatable, resizable boxes on a Fabric.js canvas, undo and redo per scan, loupes on every handle and, while a box is moved or rotated, in all four of its corners. Projects are `.oxicut` files (small JSON files in the OxiCut folder in Documents).
 
 **What ScanSplitter has that OxiCut does not (yet)**
-- PDF input, archival metadata and manifests (Phase 5 of the roadmap), Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
+- Archival metadata, Album Splitter mode, the separate v4 and v5 modes, and the experimental OpenRouter vision-model mode.
 - Small differences to expect on the same scan: OxiCut decodes JPEG with a different library than Pillow, so on hard images boxes can differ by a few pixels, and its default trim is 0 px (ScanSplitter's 10 px shrinks every box).
 
 ## Command line
@@ -110,7 +110,7 @@ npm install
 cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 ```
 
-`cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests. A release is built by the GitHub workflow in `.github/workflows/release.yml`; see [`docs/TESTING.md`](docs/TESTING.md).
+`cargo test --workspace` runs the Rust tests, including the stage-by-stage comparisons against ScanSplitter's output (`benchmarks/golden/`); `npm test` in `app` runs the interface logic tests. A release is built by the GitHub workflow in `.github/workflows/release.yml`; see [`docs/testing.md`](docs/testing.md).
 
 ## Credits and license
 

@@ -15,7 +15,7 @@ For 0.1.0 and the ones after. Tick things off in the release pull request, or wr
 - [ ] **Changelog** has a section for the version, in plain words, with the date (`docs/changelog.md`). The workflow refuses to run without it.
 - [ ] **Version** bumped in the workspace `Cargo.toml` (and `Cargo.lock`); the bottom bar and About show it after `cd app; cargo tauri build --no-bundle`.
 - [ ] **Everything passes** on `main`: `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, in `app`: `npm test`, `npm run build`.
-- [ ] **Clean machine.** On a Windows 10 or 11 machine without development tools: install, first start (welcome dialog, model downloads, and what happens with no internet), open a `.oxicut` file by double-clicking, upgrade over the previous version, uninstall.
+- [ ] **Clean machine.** On a Windows 10 or 11 machine without development tools: install, first start (welcome dialog, model downloads, and what happens with no internet), open a `.oxicut` file by double-clicking, upgrade over the previous version, uninstall. _(Done once: a fresh Windows 10 machine with an i7-7700K installed it and it worked. Not yet tried: Windows 11, no WebView2, upgrade over an old version, uninstall, the double-click.)_
 - [ ] **Failure behaviour.** A full disk, a read-only output folder, a corrupt or very large scan, a scan that was moved, a scans folder with hundreds of files; the messages are plain.
 - [ ] **Memory.** `docs/memory-usage.md`: the numbers for the machine sizes the website names.
 - [ ] **Licence notices.** Third-party licences (Rust and npm packages, the models) come with the installer; the README credits are right.

@@ -1,6 +1,6 @@
 # Distributing OxiCut to non-technical, mostly older users
 
-Written 2026-10-27. Nothing here is built yet; the steps are tracked in Phase 7 of [`roadmap.md`](../roadmap.md).
+Written 2026-10-27. Nothing here is built yet; the steps are tracked as issues on GitHub (signing, the Microsoft Store, winget, updating inside the app, the website).
 
 ## Context
 
