@@ -37,10 +37,14 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      # Keep the compiled crates, even from a run that failed later on, so the next run starts warm.
+      # Keep the compiled crates, even from a run that failed later on, so the next run starts warm. This
+      # workflow has its own cache (a release build is a different kind of build from the tests'), and the
+      # key includes this file, so changing a step here makes a fresh, complete cache instead of the old one
+      # matching for ever.
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: windows
+          shared-key: windows-release
+          key: ${{ hashFiles('.github/workflows/release.yml') }}
           cache-on-failure: true
 
       # Downloads made while building: the installer tools (NSIS, WebView2 helper) and ONNX Runtime.
