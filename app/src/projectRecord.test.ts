@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fromRecord, nextIdAfter, pairsFromPositions, projectKey, restoreStatus, toProjectFile, toRecord } from "./projectRecord.ts";
+import { cropDetailsFromRecords, fromRecord, nextIdAfter, pairsFromPositions, projectKey, restoreStatus, toProjectFile, toRecord } from "./projectRecord.ts";
 
 const scan = {
   id: 4,
@@ -15,6 +15,8 @@ const scan = {
   exportedFiles: ["D:/out/a-1.png"],
   backsOn: null,
   pairs: [],
+  details: { date: "", place: "", caption: "", people: [] as string[] },
+  cropDetails: {} as Record<number, { date: string; place: string; caption: string; people: string[] }>,
   error: null,
 };
 
@@ -91,4 +93,39 @@ test("an old record without pairs opens unpaired, and a pairing change changes w
   assert.deepEqual(old.pairPositions, []);
   const before = projectKey([scan]);
   assert.notEqual(before, projectKey([{ ...scan, backsOn: 9 }, { ...scan, id: 9 }]));
+});
+
+test("details are saved with the scan, and a picture's own by position", () => {
+  const box = (id: number) => ({ cx: id, cy: id, w: 1, h: 1, angle: 0, id });
+  const described = {
+    ...scan,
+    boxes: [box(10), box(11), box(12)],
+    details: { date: "summer 1975", place: "Balaton", caption: "Beach day", people: ["Anna", "Péter"] },
+    cropDetails: {
+      11: { date: "", place: "", caption: "Only this one", people: [] },
+      12: { date: "", place: "", caption: "", people: [] },
+      99: { date: "1900", place: "", caption: "", people: [] },
+    },
+  };
+  const record = toRecord(described);
+  assert.deepEqual(record.details, described.details);
+  // Only pictures that exist and have something of their own are saved, by position.
+  assert.deepEqual(record.cropDetails, [{ index: 1, date: "", place: "", caption: "Only this one", people: [] }]);
+
+  const back = fromRecord(JSON.parse(JSON.stringify(record)));
+  assert.deepEqual(back.details, described.details);
+  assert.deepEqual(back.cropDetailRecords, record.cropDetails);
+  const boxes = [{ id: 30 }, { id: 31 }, { id: 32 }];
+  assert.deepEqual(cropDetailsFromRecords(back.cropDetailRecords, boxes), {
+    31: { date: "", place: "", caption: "Only this one", people: [] },
+  });
+  // A position that points at nothing is dropped.
+  assert.deepEqual(cropDetailsFromRecords([{ index: 7, date: "x", place: "", caption: "", people: [] }], boxes), {});
+});
+
+test("a record from before details existed opens with none, and editing details changes what is saved", () => {
+  const old = fromRecord({ id: 1, path: "x.png" });
+  assert.deepEqual(old.details, { date: "", place: "", caption: "", people: [] });
+  assert.deepEqual(old.cropDetailRecords, []);
+  assert.notEqual(projectKey([scan]), projectKey([{ ...scan, details: { date: "", place: "Balaton", caption: "", people: [] } }]));
 });

@@ -44,6 +44,8 @@ pub struct AppSettings {
     pub output_dir: Option<String>,
     /// Approve scans with nothing to flag as soon as they are detected.
     pub auto_approve: bool,
+    /// Features that are built but not switched on for everyone (see `docs/feature-flags.md`).
+    pub features: Vec<String>,
     /// The project reopened when the app starts.
     pub last_project: Option<String>,
     /// Recently used projects, most recent first.
@@ -66,10 +68,35 @@ impl Default for AppSettings {
             tag_software: true,
             output_dir: None,
             auto_approve: true,
+            features: Vec::new(),
             last_project: None,
             recent_projects: Vec::new(),
         }
     }
+}
+
+/// The environment variable that switches features on for one run, for example `OXICUT_FEATURES=details`.
+pub const FEATURES_ENV: &str = "OXICUT_FEATURES";
+
+/// The features that are on: the ones in the environment variable (separated by commas, semicolons or
+/// spaces) and the ones listed in the settings file, in lower case, each once, in a fixed order.
+pub fn parse_features(from_env: Option<&str>, listed: &[String]) -> Vec<String> {
+    let mut names: Vec<String> = from_env
+        .unwrap_or_default()
+        .split(|c: char| c == ',' || c == ';' || c.is_whitespace())
+        .map(str::to_string)
+        .chain(listed.iter().cloned())
+        .map(|n| n.trim().to_lowercase())
+        .filter(|n| !n.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// The features that are on for this run.
+pub fn enabled_features() -> Vec<String> {
+    parse_features(std::env::var(FEATURES_ENV).ok().as_deref(), &load().features)
 }
 
 /// `OXICUT_DATA_DIR` if set (tests, portable use), else `<user data>/oxicut`.
@@ -116,6 +143,26 @@ pub fn save(settings: &AppSettings) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn features_come_from_the_environment_and_the_settings_file() {
+        // Nothing is on by default.
+        assert!(AppSettings::default().features.is_empty());
+        assert!(parse_features(None, &[]).is_empty());
+        // The variable: commas, semicolons and spaces all separate, case does not matter.
+        assert_eq!(
+            parse_features(Some("Photo-Details, other;third  fourth"), &[]),
+            ["fourth", "other", "photo-details", "third"]
+        );
+        // The settings file adds to it, and a feature named twice is on once.
+        let listed = vec!["PHOTO-DETAILS".to_string(), " extra ".to_string(), String::new()];
+        assert_eq!(parse_features(Some("photo-details"), &listed), ["extra", "photo-details"]);
+        // A settings file from before the list existed still loads, with none on.
+        let old: AppSettings = serde_json::from_str(r#"{"insetPx": 4}"#).unwrap();
+        assert!(old.features.is_empty());
+        let new: AppSettings = serde_json::from_str(r#"{"features": ["photo-details"]}"#).unwrap();
+        assert_eq!(new.features, ["photo-details"]);
+    }
 
     #[test]
     fn partial_and_future_files_still_load() {

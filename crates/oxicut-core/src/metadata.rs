@@ -14,6 +14,8 @@ use img_parts::jpeg::Jpeg;
 use img_parts::png::Png;
 use img_parts::{Bytes, ImageEXIF, ImageICC};
 
+use crate::details::Details;
+
 /// Resolution in dots per inch.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Dpi {
@@ -43,6 +45,9 @@ pub struct Metadata {
     /// Write OxiCut into the crop's `Software` field. Set by the exporter
     /// from the user's choice; never read from a file.
     pub tag_software: bool,
+    /// What the user entered about this picture (date, place, caption, people). Set by the exporter;
+    /// never read from a file.
+    pub details: Option<Details>,
 }
 
 /// What goes into the `Software` field of a crop when asked for.
@@ -51,9 +56,15 @@ pub fn software() -> String {
 }
 
 impl Metadata {
-    /// Nothing that was read from a file (the `tag_software` choice is not file content).
+    /// Nothing that was read from a file (the `tag_software` choice and the details are not file content).
     pub fn is_empty(&self) -> bool {
         self.dpi.is_none() && self.icc.is_none() && self.exif.is_none()
+    }
+
+    /// The XMP packet carrying the user's details, if there are any.
+    pub fn xmp(&self) -> Option<Vec<u8>> {
+        let details = self.details.as_ref()?;
+        crate::xmp::packet(details, self.software_tag().as_deref())
     }
 
     /// The `Software` value to write, if the user wants OxiCut named.
@@ -69,25 +80,27 @@ impl Metadata {
 
     /// EXIF for a crop: the scan's own fields without what is wrong for a
     /// crop, the resolution if it is known, and `Software` set to OxiCut if
-    /// asked for (otherwise the scan's own `Software` stays). `None` when
-    /// there is nothing to write.
+    /// asked for (otherwise the scan's own `Software` stays). The date and the caption the user
+    /// entered replace the scan's own date and description. `None` when there is nothing to write.
     pub fn crop_exif(&self) -> Option<Vec<u8>> {
         let software = self.software_tag();
         let software = software.as_deref();
+        let details = self.details.as_ref().map(Details::normalized);
+        let details = details.as_ref();
         if let Some(raw) = &self.exif
-            && let Some(rewritten) = rewrite_exif(raw, software, self.dpi, false)
+            && let Some(rewritten) = rewrite_exif(raw, software, self.dpi, false, details)
         {
             // A JPEG APP1 segment holds 64 KB; maker notes are the usual cause of more.
             if rewritten.len() <= 60_000 {
                 return Some(rewritten);
             }
-            if let Some(smaller) = rewrite_exif(raw, software, self.dpi, true)
+            if let Some(smaller) = rewrite_exif(raw, software, self.dpi, true, details)
                 && smaller.len() <= 60_000
             {
                 return Some(smaller);
             }
         }
-        rewrite_exif(&[], software, self.dpi, true)
+        rewrite_exif(&[], software, self.dpi, true, details)
     }
 }
 
@@ -227,14 +240,18 @@ const NOT_FOR_CROPS: [Tag; 7] = [
 
 /// Rebuild an EXIF block for a crop. Fields of the main image are kept except
 /// [`NOT_FOR_CROPS`] (the thumbnail IFD goes entirely: it shows the whole scan);
-/// `Software` is set when given (else the scan's own stays) and so is the resolution.
-/// `raw` may be empty. `None` when there is nothing to write.
+/// `Software` is set when given (else the scan's own stays) and so is the resolution. A date or caption
+/// in `details` takes the place of the scan's own `DateTimeOriginal`, `DateTimeDigitized` and
+/// `ImageDescription`. `raw` may be empty. `None` when there is nothing to write.
 fn rewrite_exif(
     raw: &[u8],
     software: Option<&str>,
     dpi: Option<Dpi>,
     drop_maker_note: bool,
+    details: Option<&Details>,
 ) -> Option<Vec<u8>> {
+    let exif_date = details.and_then(Details::exif_date);
+    let caption = details.map(|d| d.caption.as_str()).filter(|c| !c.is_empty());
     let parsed = if raw.is_empty() {
         None
     } else {
@@ -246,6 +263,8 @@ fn rewrite_exif(
         .filter(|f| f.ifd_num == In::PRIMARY)
         .filter(|f| !NOT_FOR_CROPS.contains(&f.tag))
         .filter(|f| !(software.is_some() && f.tag == Tag::Software))
+        .filter(|f| !(exif_date.is_some() && (f.tag == Tag::DateTimeOriginal || f.tag == Tag::DateTimeDigitized)))
+        .filter(|f| !(caption.is_some() && f.tag == Tag::ImageDescription))
         .filter(|f| !(drop_maker_note && f.tag == Tag::MakerNote))
         .cloned()
         .collect();
@@ -256,6 +275,15 @@ fn rewrite_exif(
     };
     if let Some(software) = software {
         fields.push(new(Tag::Software, Value::Ascii(vec![software.as_bytes().to_vec()])));
+    }
+    if let Some(date) = exif_date {
+        for tag in [Tag::DateTimeOriginal, Tag::DateTimeDigitized] {
+            fields.push(new(tag, Value::Ascii(vec![date.as_bytes().to_vec()])));
+        }
+    }
+    if let Some(caption) = caption {
+        // EXIF text is meant to be ASCII; readers take UTF-8 bytes as they are, and the XMP has it too.
+        fields.push(new(Tag::ImageDescription, Value::Ascii(vec![caption.as_bytes().to_vec()])));
     }
     if let Some(dpi) = dpi {
         let ratio = |v: f32| exif::Rational {
@@ -321,6 +349,7 @@ mod tests {
             icc: None,
             exif: Some(scan),
             tag_software: true,
+            details: None,
         };
 
         let crop = ExifReader::new().read_raw(meta.crop_exif().unwrap()).unwrap();

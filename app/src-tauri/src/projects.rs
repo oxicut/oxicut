@@ -30,6 +30,27 @@ pub struct Project {
     pub scans: Vec<ScanRecord>,
 }
 
+/// What the user entered about the pictures of a scan, or about one picture (an empty text means
+/// "nothing entered here").
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DetailsRecord {
+    /// The date as typed ("circa 1980").
+    pub date: String,
+    pub place: String,
+    pub caption: String,
+    pub people: Vec<String>,
+}
+
+/// The details of one picture of a scan that has its own, by position in the scan's list of boxes.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CropDetailsRecord {
+    pub index: usize,
+    #[serde(flatten)]
+    pub details: DetailsRecord,
+}
+
 /// One scan of the project. The screen ids of boxes are not kept: they are made up fresh on open.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -54,6 +75,10 @@ pub struct ScanRecord {
     /// Which picture on this scan goes with which on `backs_on`: positions in the two box lists
     /// (front, back), since screen ids of boxes are not kept.
     pub pairs: Vec<[usize; 2]>,
+    /// What the user entered about every picture on this scan.
+    pub details: DetailsRecord,
+    /// Pictures that have details of their own, which win over the scan's.
+    pub crop_details: Vec<CropDetailsRecord>,
     pub error: Option<String>,
 }
 
@@ -314,6 +339,19 @@ mod tests {
             exported_files: vec!["D:/out/a-1.tif".into()],
             backs_on: Some(7),
             pairs: vec![[0, 0]],
+            details: DetailsRecord {
+                date: "circa 1980".into(),
+                place: "Balaton".into(),
+                caption: "Beach, \"summer\"".into(),
+                people: vec!["Anna".into(), "Péter".into()],
+            },
+            crop_details: vec![CropDetailsRecord {
+                index: 0,
+                details: DetailsRecord {
+                    caption: "Just this one".into(),
+                    ..Default::default()
+                },
+            }],
             ..Default::default()
         }
     }
@@ -375,6 +413,8 @@ mod tests {
         assert_eq!(project.scans[0].id, 3);
         assert!(project.scans[0].boxes.is_empty());
         assert_eq!((project.scans[0].backs_on, project.scans[0].pairs.len()), (None, 0));
+        assert_eq!(project.scans[0].details, DetailsRecord::default());
+        assert!(project.scans[0].crop_details.is_empty());
         assert_eq!(project.format_version, 0);
     }
 

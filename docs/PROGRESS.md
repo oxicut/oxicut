@@ -186,6 +186,18 @@ The `Tests` workflow is now three jobs. **`changes`** lists the files a pull req
 
 No `cargo fmt --check` yet: the code has never been run through rustfmt, so it would fail until a one-off `cargo fmt` is committed.
 
+## Date, place, caption and people (2026-10-30)
+
+**Hidden for now** (2026-11-03): this is built and tested but switched off for users behind the `photo-details` flag; see the entry on the flag below. What follows describes it as built.
+
+Every picture can now carry what the person scanning it knows: when it was taken, where, what it shows and who is in it. Details are entered per scan (the **Details** tab) and every picture on the scan gets them; **About this picture…** on a crop card gives one picture details of its own, field by field (an empty field follows the scan; the people list replaces the scan's when it has names). **Copy to the other scans** fills only the empty fields of the other scans. They are saved in the project (`details` and `cropDetails`; a picture's own are saved by position in the box list, as pairs are), so older files open without any.
+
+The date is free text. `dates.ts` reads the year (and month and day when given) out of forms such as `1975`, `circa 1980`, `1980s`, `summer 1975`, `14 March 1982` and `14.3.1982` (day first), and the line under the field says in plain words what was understood. The wording is always kept.
+
+What is written (`crates/oxicut-core/src/details.rs`, `xmp.rs`, `metadata.rs`, `export.rs`): EXIF `DateTimeOriginal` and `DateTimeDigitized` (a representative date: a missing month or day is January or the 1st) and `ImageDescription` (the caption) replace the scan's own, for JPEG and PNG; an XMP packet built by hand (no new dependency) with `dc:description`, `dc:subject` and `Iptc4xmpExt:PersonInImage` (the names), `Iptc4xmpCore:Location` (the place), `photoshop:DateCreated` (the date as far as it is known: `1975`, `1975-06` or `1975-06-14`), `oxicut:dateText` (the date as typed) and `xmp:CreatorTool` when the Software stamp is on. It goes into a JPEG as an APP1 segment, into a PNG as an iTXt chunk and into a TIFF as tag 700; a TIFF also gets an ASCII caption as its description tag. Limits: caption 2000 characters, other texts 200, 100 people, each person once; control characters are dropped. Entered details are always written (the "keep the scan's EXIF" switch only governs what comes from the scan); the larger view's final result writes them too.
+
+Checked in the built app with the sample pair: typed a date, place, caption and people, gave one picture its own caption, exported, and read the files back (Windows reads the date taken and the description; the XMP holds the names, place, date and caption; the other picture carries the scan's caption; the backs scan, which had none, carries none); closed and reopened the app and the details and the "has its own" marker were still there. `cargo clippy -- -D warnings` is clean.
+
 ## Whole cards on a white lid (2026-11-03)
 
 A white-lid scan of eight cream and tan postcards (the owner's own, kept in the untracked `reference/postcards` together with the boxes the owner fixed by hand) was handled badly by all three detectors: average overlap with the hand-fixed boxes 0.61 (v3, v7-lite) and 0.59 (v7). ScanSplitter's Python v3 does the same, so this is a limit of the original, not a port error. Causes and the fix are in `docs/detector-v7-port.md` ("the card pass"): cream and tan paper was counted as lid, pale paper sat under the Otsu threshold set by the artwork, and stacked cards were never split.
@@ -197,6 +209,10 @@ On the scan: v3 and v7-lite 0.96 and v7 0.92, all eight cards found, every card 
 ## Portrait cards in the Crops view (2026-11-03)
 
 A card turned to portrait (a 2:1 postcard turned a quarter, 667 x 1144 or so) showed only its middle in the Crops view: the picture box is a button 220 px high, and the percentage `max-height: 100%` on the picture does not resolve against a button, so a tall card was drawn at its full height and clipped. The box height is now a number (`--card-picture`) that the picture's `max-height` uses too. The larger view was never affected. Checked in the app with a card turned from landscape to portrait: it shows whole, landscape cards look as before.
+
+## A feature flag for unfinished features (2026-11-03)
+
+Date, place, caption and people are built but not ready for everyone, so they are now behind a flag called `photo-details`, off unless switched on (`OXICUT_FEATURES=photo-details` for one run, or `"features": ["photo-details"]` in the settings file; there is no switch on screen). Off, the app shows and writes nothing of it: no Details tab, no *About this picture…* on the crop cards, no line on the cards, and a single check in `detailsForExport` keeps the details out of every export and of the larger view's final result even if a project holds some. The engine and the data model are unchanged, and project files keep their details for later. The flag is about 25 lines of our own (`settings.rs`: the environment variable and a `features` list in the settings file; `store.ts`: `hasFeature`); the README no longer mentions the feature. A short how-to, the list of flags and the reasons for not using a flag library (looked at for crates.io and npm: hosted services, or layers that still need a provider written) are in `docs/feature-flags.md`.
 
 ## Test workflow: caches that update, and checks only when they matter (2026-11-03)
 

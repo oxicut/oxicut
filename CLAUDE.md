@@ -19,4 +19,5 @@ Not nerds. Think of someone in middle age or older with a shoebox of prints and 
 - Detection mirrors ScanSplitter (`reference/ScanSplitter`): when something looks wrong, check whether the Python original does the same and say so.
 - Tests: `cargo test --workspace`, `cargo clippy --workspace --all-targets`, and in `app`: `npm test`, `npm run build`. Build the app with `cd app; cargo tauri build --no-bundle` (close the running app first, it locks the exe).
 - Edit files with the editing tools, not PowerShell `Set-Content` (it breaks UTF-8) and not shell one-liners with backslashes (they get collapsed).
+- Features that are built but not ready for everyone hide behind a flag, off by default (`docs/feature-flags.md`); nothing of them shows in the README, the app or the website while it is off.
 - Keep `docs/TESTING.md`, `docs/PROGRESS.md` and `roadmap.md` in step with what changes. Commit only when asked.

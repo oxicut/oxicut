@@ -20,7 +20,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import * as api from "../api";
 import { boxesKey } from "../closeGuard";
 import { resizeBox, type SizeChange } from "../cropSize";
-import { exportOptions, resizeCrop, say, undo } from "../store";
+import { detailsForExport, exportOptions, resizeCrop, say, undo } from "../store";
 
 const props = defineProps<{ items: LightboxItem[]; index: number }>();
 const emit = defineEmits<{ close: []; "update:index": [index: number] }>();
@@ -59,7 +59,7 @@ const made = new Map<string, api.FinalCrop>();
 
 function cutKey(current: LightboxItem): string {
   const { format, jpegQuality, pattern, keepMetadata, tagSoftware } = exportOptions();
-  return [current.scan.id, current.index, boxesKey([current.box]), current.chosenName, format, jpegQuality, pattern, keepMetadata, tagSoftware].join("|");
+  return [current.scan.id, current.index, boxesKey([current.box]), current.chosenName, JSON.stringify(detailsForExport(current.scan, current.box.id)), format, jpegQuality, pattern, keepMetadata, tagSoftware].join("|");
 }
 
 function showRemembered() {
@@ -78,7 +78,7 @@ async function showFinalResult() {
   cutError.value = "";
   try {
     const { cx, cy, w, h, angle } = current.box;
-    const done = await api.finalCrop(current.scan.path, { cx, cy, w, h, angle }, current.index + 1, current.chosenName, exportOptions());
+    const done = await api.finalCrop(current.scan.path, { cx, cy, w, h, angle }, current.index + 1, current.chosenName, detailsForExport(current.scan, current.box.id), exportOptions());
     made.set(key, done);
     // The lightbox may have moved on to another crop while this was being cut.
     if (item.value === current) {

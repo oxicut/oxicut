@@ -3,13 +3,16 @@ import { computed, ref, watch } from "vue";
 import * as api from "../api";
 import { boxesKey } from "../closeGuard";
 import { baseName } from "../cropNames";
+import { detailsLine } from "../details";
 import {
   backsOf,
   cropPlansFor,
+  detailsFor,
   exportApproved,
   exportScan,
   exportableCount,
   frontsOf,
+  hasFeature,
   matchAgain,
   removeCrop,
   say,
@@ -22,6 +25,7 @@ import {
 } from "../store";
 import type { BoxItem, ScanItem } from "../store";
 import BacksChooser from "./BacksChooser.vue";
+import CropDetailsDialog from "./CropDetailsDialog.vue";
 import CropLightbox from "./CropLightbox.vue";
 import ViewSwitch from "./ViewSwitch.vue";
 import type { LightboxItem } from "./CropLightbox.vue";
@@ -90,6 +94,10 @@ interface Card extends LightboxItem {
   role: "front" | "back" | null;
   /** For a front: its back. For a back: its front. */
   partner: Partner | null;
+  /** "1975 · Balaton": what the picture is described as, if anything. */
+  about: string;
+  /** The picture has details of its own, beyond its scan's. */
+  ownDetails: boolean;
 }
 
 /** The picture of one box of another scan, if it has been cut. */
@@ -128,6 +136,8 @@ const cards = computed<Card[]>(() =>
         index,
         name: written ?? planned,
         chosenName: plan.chosenName,
+        about: hasFeature("photo-details") ? detailsLine(detailsFor(scan, box.id)) : "",
+        ownDetails: hasFeature("photo-details") && !!scan.cropDetails[box.id],
         role: plan.role,
         partner,
         width: Math.round(box.w),
@@ -140,6 +150,10 @@ const cards = computed<Card[]>(() =>
 );
 
 const lightbox = ref<number | null>(null);
+/** Details (date, place, caption, people) are built but switched off for now (docs/feature-flags.md). */
+const detailsOn = computed(() => hasFeature("photo-details"));
+/** The picture whose own details are being edited. */
+const describing = ref<Card | null>(null);
 
 const formatLabel = computed(() => ({ same: "the scan's own format", jpg: "JPEG", png: "PNG", tiff: "TIFF" })[state.settings.format]);
 const where = computed(() => state.settings.outputDir || "an “OxiCut output” folder beside each scan");
@@ -228,6 +242,7 @@ function showInFolder(card: Card) {
             <strong class="name" :title="card.name">{{ card.name }}</strong>
             <span v-if="state.cropsScope === 'all'" class="muted small" :title="card.scan.path">from {{ card.scan.name }}</span>
             <span class="muted small">{{ card.width }} × {{ card.height }} px</span>
+            <span v-if="card.about" class="muted small about" :title="card.about">{{ card.about }}</span>
             <span v-if="card.role" class="chip accent">{{ card.role === "front" ? "Front" : "Back" }}</span>
             <span v-if="card.exported" class="chip ok">Exported</span>
           </div>
@@ -260,6 +275,15 @@ function showInFolder(card: Card) {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
               Remove
             </button>
+            <button
+              v-if="detailsOn"
+              class="btn tiny"
+              :class="{ own: card.ownDetails }"
+              title="Date, place, caption and people for this picture only"
+              @click="describing = card"
+            >
+              About this picture…
+            </button>
             <button v-if="card.role" class="btn tiny" title="This picture and its partner are saved on their own again" @click="notAPair(card)">Not a pair</button>
             <button v-if="card.exported" class="btn tiny" title="Show the written file in its folder" @click="showInFolder(card)">Show file</button>
           </div>
@@ -278,6 +302,7 @@ function showInFolder(card: Card) {
       </button>
     </footer>
 
+    <CropDetailsDialog v-if="describing && detailsOn" :scan="describing.scan" :box="describing.box" :name="describing.name" @close="describing = null" />
     <BacksChooser v-if="choosing && asFront" :front="asFront" @close="choosing = false" />
     <CropLightbox v-if="lightbox !== null" v-model:index="lightbox" :items="cards" @close="lightbox = null" />
   </section>
@@ -411,6 +436,16 @@ function showInFolder(card: Card) {
 }
 .small {
   font-size: 12px;
+}
+.about {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tiny.own {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .pairrow {
   display: flex;

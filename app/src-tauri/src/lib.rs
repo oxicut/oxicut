@@ -185,12 +185,13 @@ async fn final_crop(
     region: engine::BoxDto,
     number: usize,
     name: Option<String>,
+    details: Option<batch::DetailsDto>,
     options: ExportOptions,
     state: State<'_, AppState>,
 ) -> Result<batch::FinalCrop, String> {
     let scratch = state.cache_dir.join("final-crops");
     tauri::async_runtime::spawn_blocking(move || {
-        batch::final_crop(&PathBuf::from(path), &region, number, name.as_deref(), &options, &scratch)
+        batch::final_crop(&PathBuf::from(path), &region, number, name.as_deref(), details.as_ref(), &options, &scratch)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -221,6 +222,12 @@ async fn export_scans(
 #[tauri::command]
 fn load_settings() -> AppSettings {
     settings::load()
+}
+
+/// The features that are switched on (none, unless the environment or the settings file says so).
+#[tauri::command]
+fn features() -> Vec<String> {
+    settings::enabled_features()
 }
 
 #[tauri::command]
@@ -304,6 +311,7 @@ pub fn run() {
             evaluate_flags,
             export_scans,
             load_settings,
+            features,
             save_settings,
             models_status,
             models_folder,

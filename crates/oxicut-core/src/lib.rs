@@ -17,6 +17,7 @@ pub mod chroma;
 pub mod color;
 pub mod contours;
 pub mod crop;
+pub mod details;
 pub mod detect;
 pub mod export;
 pub mod filter;
@@ -41,5 +42,6 @@ pub mod tighten;
 pub mod v5;
 pub mod v7;
 pub mod warp;
+pub mod xmp;
 
 pub use geometry::RotatedRect;

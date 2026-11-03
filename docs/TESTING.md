@@ -48,6 +48,20 @@ Things worth checking in particular:
 
 Change `version` in the root `Cargo.toml` (it feeds the app, the installer and the command line), push, then on GitHub open Actions, choose *Release* and *Run workflow*. It runs the tests, builds the installer and publishes a release named `v<version>` with `OxiCut-setup.exe`. Running it again for the same version replaces that release. Install the result on a clean machine and check: it starts, the About window shows the version, and double-clicking a `.oxicut` file opens it.
 
+## Date, place, caption and people
+
+This is hidden behind the `photo-details` flag (see [`feature-flags.md`](feature-flags.md)). Start the app with it on, for example in PowerShell: `$env:OXICUT_FEATURES = "photo-details"`, then run the app (or put `"features": ["photo-details"]` in the settings file). **With the flag off, as in a normal run, check that none of it shows**: no Details tab on the right, no *About this picture…* on the crop cards, no line of date and place on them, and an export carries no XMP and keeps the scan's own date and description. With it on:
+
+Open the **Details** tab (right panel) with a scan selected and fill in the fields: the line under *Date* says what OxiCut understood ("Saved as about 1980." for "circa 1980"; "No year found, so it is kept as you wrote it." when there is no year). In the **Crops** view each card shows the date and place in small type, and **About this picture…** opens that picture's own details (what you leave empty is taken from the scan, shown greyed out; **Use the scan's details** clears them). **Copy to the other scans** only fills what is still empty. Then export and check:
+
+- in Windows (right click a saved JPEG, Properties, Details) *Date taken*, *Comments* or the description show the date and caption; a program that reads XMP (for example a photo library) shows the caption, the people as tags, and the place;
+- a picture with its own caption carries that one, its neighbours carry the scan's;
+- a PNG and a TIFF keep their details too (for a TIFF the caption is also in the description tag when it is plain ASCII);
+- close the app and open it again: the details are still there, and the cards that have their own are marked;
+- remove a crop and press Undo: its own details come back.
+
+The date taken is a representative date: a month or day you did not give becomes January or the 1st, because EXIF cannot say "only the year". The exact wording is kept next to it.
+
 ## Postcards on a white lid
 
 Scan postcards on the white lid (cream, tan and white cards, a few touching the edge of the scan, some with a strongly coloured picture and a bare margin) and add the scan. With **Cut around** set to *The whole card or print* (Detection tab, the default) every box should follow the card's paper edge, margins included, for all three detectors, and the scan should not need hand fixing. Switch it to *Only the picture*, press *Re-detect all* and the boxes go back to the pictures (white borders left out). Known to be hard: a card whose margin is as white as the lid, cards that touch each other, and a card with a plain white strip at the bottom (the strip is not told from the lid). For a corrected project file, `oxicut detect scan.jpg --mode v3 | node tools/compare-project.mjs scan.oxicut` prints how well each hand-fixed box was found.

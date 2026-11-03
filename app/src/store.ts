@@ -1,7 +1,17 @@
 // The app's state and the actions on it. Components read `state` and call these.
 
 import { computed, reactive, watch } from "vue";
-import { fromRecord, nextIdAfter, pairsFromPositions, projectKey, toProjectFile, type RestoredStatus, type SavedScan } from "./projectRecord";
+import {
+  cropDetailsFromRecords,
+  fromRecord,
+  nextIdAfter,
+  pairsFromPositions,
+  projectKey,
+  toProjectFile,
+  type RestoredStatus,
+  type SavedScan,
+} from "./projectRecord";
+import { fillEmpty, isEmptyDetails, mergeDetails, noDetails, toExportDetails, type Details, type ExportDetails } from "./details";
 import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
@@ -43,6 +53,10 @@ export interface ScanItem {
   backsOn: number | null;
   /** Which picture on this scan goes with which on `backsOn` (box ids; saved as positions). */
   pairs: Pair[];
+  /** What the user entered about every picture on this scan (saved with the project). */
+  details: Details;
+  /** Pictures with details of their own, by box id; an empty field means "use the scan's" (saved by position). */
+  cropDetails: Record<number, Details>;
   /** What the last export of this scan cost in this session: milliseconds, and the size of each file. Not saved. */
   exportStats: { millis: number; sizes: number[] } | null;
   /** The scan file could not be found when the project was opened (moved or deleted). Not saved. */
@@ -69,6 +83,7 @@ export const defaultSettings: AppSettings = {
   maxAreaPercent: 80,
   insetPx: 0,
   cutTo: "card",
+  features: [],
   format: "same",
   jpegQuality: 92,
   pattern: "{source}-{n}",
@@ -99,9 +114,16 @@ export const state = reactive({
   modelsFolder: "",
   version: "",
   repository: "",
+  /** Features that are switched on (see docs/feature-flags.md); none unless asked for. */
+  features: [] as string[],
   modelProgress: {} as Record<string, { downloaded: number; total: number | null }>,
   modelErrors: {} as Record<string, string>,
 });
+
+/** Features that are built but hidden until they are ready. The name is what the environment variable and the settings file use. */
+export type FeatureName = "photo-details";
+
+export const hasFeature = (name: FeatureName): boolean => state.features.includes(name);
 
 export const selectedScan = computed(() => state.scans.find((s) => s.id === state.selectedId) ?? null);
 export const approvedCount = computed(() => state.scans.filter((s) => s.status === "approved").length);
@@ -300,6 +322,8 @@ function makeScan(path: string): ScanItem {
     exportedFiles: [],
     backsOn: null,
     pairs: [],
+    details: noDetails(),
+    cropDetails: {},
     exportStats: null,
     missing: false,
   };
@@ -463,6 +487,45 @@ export function removeScan(scan: ScanItem) {
   if (state.selectedId === scan.id) {
     state.selectedId = (state.scans[index] ?? state.scans[index - 1])?.id ?? null;
   }
+}
+
+// ------------------------------------------------------------------ details
+// Date, place, caption and people: one set for the scan, and pictures that have their own on top.
+
+/** What the pictures on a scan are described as, and what one picture's own details change. */
+export function detailsFor(scan: ScanItem, boxId: number): Details {
+  return mergeDetails(scan.details, scan.cropDetails[boxId]);
+}
+
+/** What the export writes for one picture; `null` when nothing was entered. */
+export function detailsForExport(scan: ScanItem, boxId: number): ExportDetails | null {
+  // Switched off: whatever a project holds is left out of the pictures.
+  if (!hasFeature("photo-details")) return null;
+  return toExportDetails(detailsFor(scan, boxId));
+}
+
+export function setScanDetails(scan: ScanItem, details: Details) {
+  scan.details = { ...details, people: [...details.people] };
+}
+
+/** A picture's own details; all empty means it has none and follows the scan. */
+export function setCropDetails(scan: ScanItem, boxId: number, details: Details) {
+  if (isEmptyDetails(details)) delete scan.cropDetails[boxId];
+  else scan.cropDetails[boxId] = { ...details, people: [...details.people] };
+}
+
+/** Copy what is entered for `scan` to every other scan, filling only what is still empty there. */
+export function copyDetailsToOthers(scan: ScanItem): number {
+  let changed = 0;
+  for (const other of state.scans) {
+    if (other.id === scan.id) continue;
+    const filled = fillEmpty(scan.details, other.details);
+    if (JSON.stringify(filled) !== JSON.stringify(other.details)) {
+      other.details = filled;
+      changed++;
+    }
+  }
+  return changed;
 }
 
 // ------------------------------------------------------------ fronts and backs
@@ -630,6 +693,7 @@ function exportItem(scan: ScanItem): api.ExportItem {
     path: scan.path,
     boxes: scan.boxes.map(({ cx, cy, w, h, angle }) => ({ cx, cy, w, h, angle })),
     names: plans.map((p) => p.chosenName),
+    details: scan.boxes.map((box) => detailsForExport(scan, box.id)),
     folderOf: front && plans.some((p) => p.role === "back") ? front.path : null,
   };
 }
@@ -770,8 +834,11 @@ export function forgetProject(path: string) {
   state.settings.recentProjects = state.settings.recentProjects.filter((p) => p.path.toLowerCase() !== path.toLowerCase());
 }
 
-function restoreScan(saved: SavedScan & { status: RestoredStatus; pairPositions?: [number, number][] }, missing: boolean): ScanItem {
-  const { pairPositions: _positions, ...rest } = saved;
+function restoreScan(
+  saved: SavedScan & { status: RestoredStatus; pairPositions?: [number, number][]; cropDetailRecords?: unknown },
+  missing: boolean,
+): ScanItem {
+  const { pairPositions: _positions, cropDetailRecords: _records, ...rest } = saved;
   return {
     ...rest,
     boxes: saved.boxes.map(withId),
@@ -840,6 +907,7 @@ export async function openProject(path: string): Promise<boolean> {
     for (const [index, saved] of restored.entries()) {
       const front = state.scans[index];
       if (!front) continue;
+      front.cropDetails = cropDetailsFromRecords(saved.cropDetailRecords, front.boxes);
       const backs = saved.backsOn === null ? undefined : state.scans.find((s) => s.id === saved.backsOn);
       if (!backs || backs.id === front.id) {
         front.backsOn = null;
@@ -903,6 +971,7 @@ async function openStartProject(wanted: string | null) {
 
 export async function initApp() {
   await initSettings();
+  state.features = await api.features().catch(() => []);
   void api.appVersion().then((v) => (state.version = v));
   void api.appRepository().then((url) => (state.repository = url));
   void refreshModels();
