@@ -91,6 +91,15 @@ Select one picture on the canvas. The **Another cut** button (left column, under
 - Detect a scan, then change a detection setting (the detector, smallest or largest print, trim, cut around, or *Turn pictures the right way up*): **Re-detect** in the toolbar becomes **Re-detect with new settings** and is outlined, and in the Detection tab the *Re-detect all* button is outlined with a line such as "2 of 2 scans were found with other settings." Pressing either brings the scan back to normal. A change to an export option or the theme does nothing.
 - Move a box by hand, then change a setting: that scan's button stays plain. Close and open the project: the outlines come back where a scan was found with other settings; a project from before this was added shows none.
 
+## A newer version
+
+Needs a newer release than the one you run. Without publishing anything, start a small web server in a folder that holds `releases.json` (GitHub's list format: `tag_name`, `name`, `body`, `html_url`, `published_at`, `draft`, `prerelease`) and a `CHANGELOG.md`, and start the app with `OXICUT_UPDATE_URL=http://127.0.0.1:8000`. Check:
+
+- a small arrow appears next to "OxiCut 0.x.y" in the bottom bar and in the About window ("Version N is available." and **See what's new**); click it: the **What is new** window lists the entries newer than yours, newest first (not yours, not *Unreleased*), scrolls when there are many, and **Get version N** opens the release page;
+- without a changelog the window shows the release's own notes; with the newest release equal to yours there is no arrow and About says "You have the newest version.";
+- Settings → Updates: with the box ticked off (or `OXICUT_NO_UPDATE_CHECK=1`) nothing is asked (the server log shows no request); a server that is down or an answer that makes no sense changes nothing on screen;
+- the arrow and the window are reachable and closable by keyboard (Tab, Enter, Esc).
+
 ## Fronts and backs
 
 Scan the fronts of some postcards, then turn the stack over and scan the backs. Add both scans, open the **Crops** view on the scan of the fronts and choose **Backs are on another scan…**. Check:

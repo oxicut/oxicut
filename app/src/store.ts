@@ -18,6 +18,7 @@ import * as api from "./api";
 import type { AppSettings, Box, DetectEvent, Flag, IdBox, ModelStatus } from "./api";
 import { assessClose, boxesKey } from "./closeGuard";
 import { detectKey, isOutOfDate } from "./detectStale";
+import { isNewer, pickNewest, shownVersion } from "./updates";
 import { applyTheme } from "./appearance";
 import { resizeBox, type SizeChange } from "./cropSize";
 import { turnBox } from "./cropTurn";
@@ -99,6 +100,7 @@ export const defaultSettings: AppSettings = {
   tagSoftware: true,
   outputDir: null,
   autoApprove: true,
+  checkForUpdates: true,
   lastProject: null,
   recentProjects: [],
 };
@@ -126,6 +128,12 @@ export const state = reactive({
   repository: "",
   /** Features that are switched on (see docs/feature-flags.md); none unless asked for. */
   features: [] as string[],
+  /** A newer version than this build, once the quiet check at start has found one. */
+  update: null as { version: string; url: string; notes: string } | null,
+  /** What the check found: not asked or no answer yet, this is the newest version, or a newer one exists. */
+  updateStatus: "unknown" as "unknown" | "newest" | "available",
+  /** The "What's new" window is open. */
+  whatsNewOpen: false,
   modelProgress: {} as Record<string, { downloaded: number; total: number | null }>,
   modelErrors: {} as Record<string, string>,
 });
@@ -1014,6 +1022,27 @@ async function openStartProject(wanted: string | null) {
   await newProject("My scans");
 }
 
+/** Quietly ask whether a newer version exists. Nothing is shown unless one does; any failure is ignored. */
+export async function checkForUpdate() {
+  if (!state.settings.checkForUpdates || !state.version) return;
+  try {
+    const releases = await api.checkForUpdate();
+    const newest = pickNewest(releases);
+    if (!newest) return; // switched off, or nothing published
+    if (isNewer(newest.version, state.version)) {
+      state.update = { version: shownVersion(newest.version), url: newest.url, notes: newest.notes };
+      state.updateStatus = "available";
+    } else {
+      state.update = null;
+      state.updateStatus = "newest";
+    }
+  } catch {
+    /* offline or GitHub is busy: nobody needs to hear about it */
+  }
+}
+
+export const openWhatsNew = () => (state.whatsNewOpen = true);
+
 export async function initApp() {
   await initSettings();
   state.features = await api.features().catch(() => []);
@@ -1028,6 +1057,8 @@ export async function initApp() {
   }
   await openStartProject(launch.project ?? state.settings.lastProject);
   if (launch.scans.length) await addPaths(launch.scans);
+  // After the start-up work, so the check never competes with it.
+  window.setTimeout(() => void checkForUpdate(), 3000);
 }
 
 /** Example output name for the settings panel, from the selected scan. */

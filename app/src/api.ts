@@ -1,3 +1,4 @@
+import type { Release } from "./updates";
 // Typed access to the Rust side. Every shape here mirrors one in src-tauri
 // (serde renames fields to camelCase).
 
@@ -75,6 +76,8 @@ export interface AppSettings extends DetectSettings {
   tagSoftware: boolean;
   outputDir: string | null;
   autoApprove: boolean;
+  /** Look for a newer version when the app starts. */
+  checkForUpdates: boolean;
   /** Features that are built but not switched on for everyone (see docs/feature-flags.md). */
   features: string[];
 }
@@ -270,6 +273,10 @@ export const saveSettings = (settings: AppSettings) => invoke<void>("save_settin
 export const modelsStatus = () => invoke<ModelStatus[]>("models_status");
 export const modelsFolder = () => invoke<string>("models_folder");
 export const appVersion = () => invoke<string>("app_version");
+/** The releases published so far; empty when the check is switched off. Rejects when GitHub cannot be reached. */
+export const checkForUpdate = () => invoke<Release[]>("check_for_update");
+/** The changelog, or null when there is none yet. */
+export const whatsNew = () => invoke<string | null>("whats_new");
 export const appRepository = () => invoke<string>("app_repository");
 export const downloadModels = (ids: string[], onEvent: (e: DownloadEvent) => void) =>
   invoke<void>("download_models", { ids, onEvent: channel(onEvent) });

@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { openLink } from "../api";
-import { say, state } from "../store";
+import { openWhatsNew, say, state } from "../store";
+import UpdateIcon from "./UpdateIcon.vue";
 
 const emit = defineEmits<{ close: [] }>();
+
+/** The website, where people go to download and read how it works. */
+const HOMEPAGE = "https://oxicut.github.io";
 
 /** The project this one is based on. */
 const SCANSPLITTER = "https://github.com/Madnex/ScanSplitter";
@@ -12,8 +16,19 @@ const closeButton = ref<HTMLButtonElement>();
 /** The address as people read it, without the https:// in front. */
 const address = computed(() => state.repository.replace(/^https?:\/\//, ""));
 
+function openHomepage() {
+  openLink(HOMEPAGE).catch(() => say("The website could not be opened."));
+}
+
+/** The code, for programmers. */
 function openPage() {
   openLink(state.repository).catch(() => say("The project page could not be opened."));
+}
+
+/** The What's new window opens on its own; this one gets out of its way. */
+function showWhatsNew() {
+  emit("close");
+  openWhatsNew();
 }
 
 function openScanSplitter() {
@@ -36,10 +51,26 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
     <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="about-title">
       <h1 id="about-title" class="logo"><span>Oxi</span>Cut</h1>
       <p class="version">Version {{ state.version }}</p>
+      <div v-if="state.update" class="update" role="status">
+        <p class="line">
+          <UpdateIcon @opened="emit('close')" />
+          <span>Version {{ state.update.version }} is available.</span>
+        </p>
+        <button class="link" @click="showWhatsNew">See what's new</button>
+      </div>
+      <p v-else class="quiet">
+        <span v-if="state.updateStatus === 'newest'" class="muted">You have the newest version.</span>
+        <button class="link" @click="showWhatsNew">What is new in this version</button>
+      </p>
       <p class="what">OxiCut cuts scanned photos and postcards apart into separate, straightened pictures.</p>
 
       <div class="page">
-        <button class="btn" :disabled="!state.repository" @click="openPage">Open the project page</button>
+        <button class="btn primary" @click="openHomepage">Open the OxiCut website</button>
+        <span class="muted address">oxicut.github.io</span>
+      </div>
+
+      <div class="page">
+        <button class="btn primary" :disabled="!state.repository" @click="openPage">OxiCut Project Page: For Developers</button>
         <span class="muted address">{{ address }}</span>
       </div>
 
@@ -84,8 +115,30 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   color: var(--brand-oxi);
 }
 .version {
-  margin: 0.2rem 0 1rem;
+  margin: 0.2rem 0 0.4rem;
   color: var(--muted);
+}
+.update {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  margin: 0 0 1rem;
+  font-size: 13px;
+}
+.update .line {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+}
+.quiet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  font-size: 12px;
 }
 .what {
   margin: 0 0 1.25rem;
@@ -99,6 +152,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
 }
 .address {
   font-size: 12px;
+}
+/* Both buttons are the same size, wide enough for the longer label. */
+.page .btn {
+  justify-content: center;
+  width: 17.5rem;
+  max-width: 100%;
 }
 .credit {
   margin: 0 0 1.25rem;
