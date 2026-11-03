@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use oxicut_core::RotatedRect;
-use oxicut_core::detect::{DetectOptions, Detection, detect_v3};
+use oxicut_core::detect::{CutTo, DetectOptions, Detection, detect_v3};
 use oxicut_core::export::{Collision, ExportSettings, OutputFormat, export_regions};
 use oxicut_core::io::{load_image, to_detection_rgb};
 use oxicut_core::v7::{detect_v7, detect_v7_lite};
@@ -52,6 +52,25 @@ enum Mode {
     V7,
 }
 
+/// What a box is cut around.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum Cut {
+    /// The whole card or print, margins included. On a light lid with separate cards the paper is
+    /// looked for first; any other scan gets the classic detector.
+    Card,
+    /// The picture only: ScanSplitter's behaviour.
+    Picture,
+}
+
+impl From<Cut> for CutTo {
+    fn from(cut: Cut) -> CutTo {
+        match cut {
+            Cut::Card => CutTo::Card,
+            Cut::Picture => CutTo::Picture,
+        }
+    }
+}
+
 impl Mode {
     /// Name written to `boxes.json`.
     fn name(self) -> &'static str {
@@ -69,6 +88,9 @@ struct DetectArgs {
     input: PathBuf,
     #[arg(long, value_enum, default_value = "v3")]
     mode: Mode,
+    /// What a box is cut around.
+    #[arg(long, value_enum, default_value = "card")]
+    cut_to: Cut,
     /// Smallest accepted print, as a percentage of the scan's area.
     #[arg(long, default_value_t = 2.0)]
     min_area: f64,
@@ -104,6 +126,10 @@ struct BenchCli {
     suites: Vec<String>,
     #[arg(long, value_enum, default_value = "v3")]
     mode: Mode,
+    /// What a box is cut around. The benchmark's boxes are the pictures, so `picture` reproduces
+    /// ScanSplitter's numbers.
+    #[arg(long, value_enum, default_value = "picture")]
+    cut_to: Cut,
     /// Pixels trimmed from every side. ScanSplitter's own benchmark uses its default, 10.
     #[arg(long, default_value_t = 0)]
     inset: i32,
@@ -150,6 +176,7 @@ fn main() -> Result<()> {
             mode: args.mode,
             options: DetectOptions {
                 inset: args.inset,
+                cut_to: args.cut_to.into(),
                 ..Default::default()
             },
             per_case: args.per_case,
@@ -204,6 +231,7 @@ fn detect(args: DetectArgs) -> Result<()> {
         max_area_ratio: args.max_area / 100.0,
         padding: args.padding,
         inset: args.inset,
+        cut_to: args.cut_to.into(),
         ..Default::default()
     };
     let detection = run_detection(args.mode, &source, &options)?;

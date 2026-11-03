@@ -82,6 +82,7 @@ export const defaultSettings: AppSettings = {
   minAreaPercent: 2,
   maxAreaPercent: 80,
   insetPx: 0,
+  cutTo: "card",
   format: "same",
   jpegQuality: 92,
   pattern: "{source}-{n}",
@@ -141,7 +142,7 @@ const errorText = (e: unknown) => (typeof e === "string" ? e : e instanceof Erro
 
 function detectSettings(): api.DetectSettings {
   const s = state.settings;
-  return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx };
+  return { mode: s.mode, minAreaPercent: s.minAreaPercent, maxAreaPercent: s.maxAreaPercent, insetPx: s.insetPx, cutTo: s.cutTo };
 }
 
 // ---------------------------------------------------------------- settings
@@ -153,6 +154,8 @@ export async function initSettings() {
     Object.assign(state.settings, await api.loadSettings());
     // A detector that is not available (an old or edited settings file) falls back to the default.
     if (!AVAILABLE_DETECTORS.includes(state.settings.mode)) state.settings.mode = defaultSettings.mode;
+    // Anything but "picture" (an old file, a typo) means the whole card or print.
+    if (state.settings.cutTo !== "picture") state.settings.cutTo = "card";
     state.settings.theme = parseTheme(state.settings.theme);
   } catch (e) {
     say(`Could not load settings, using defaults: ${errorText(e)}`);

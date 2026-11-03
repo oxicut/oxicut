@@ -14,7 +14,7 @@ use base64::engine::general_purpose::STANDARD;
 use image::RgbImage;
 use image::codecs::jpeg::JpegEncoder;
 use oxicut_core::crop::crop_region;
-use oxicut_core::detect::{DetectOptions, Detection, detect_v3};
+use oxicut_core::detect::{CutTo, DetectOptions, Detection, detect_v3};
 use oxicut_core::geometry::RotatedRect;
 use oxicut_core::io::{load_image, to_detection_rgb};
 use oxicut_core::resize::resize_area;
@@ -126,6 +126,27 @@ pub enum Detector {
     V7,
 }
 
+/// What a box is cut around.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum CutAround {
+    /// The whole card or print, margins included.
+    #[serde(rename = "card")]
+    #[default]
+    Card,
+    /// The picture only: a white border is left out.
+    #[serde(rename = "picture")]
+    Picture,
+}
+
+impl From<CutAround> for CutTo {
+    fn from(cut: CutAround) -> CutTo {
+        match cut {
+            CutAround::Card => CutTo::Card,
+            CutAround::Picture => CutTo::Picture,
+        }
+    }
+}
+
 /// The detection settings that matter to the detector.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -134,6 +155,7 @@ pub struct DetectSettings {
     pub min_area_percent: f64,
     pub max_area_percent: f64,
     pub inset_px: i32,
+    pub cut_to: CutAround,
 }
 
 impl Default for DetectSettings {
@@ -145,6 +167,7 @@ impl Default for DetectSettings {
             // ScanSplitter's v3 trims 10 px, but measured against its own
             // ground truth the untrimmed box is the accurate one.
             inset_px: 0,
+            cut_to: CutAround::default(),
         }
     }
 }
@@ -156,6 +179,7 @@ impl DetectSettings {
             max_area_ratio: (self.max_area_percent / 100.0).clamp(0.0, 1.0),
             padding: 0,
             inset: self.inset_px.clamp(0, 500),
+            cut_to: self.cut_to.into(),
             ..Default::default()
         }
     }
@@ -680,8 +704,10 @@ mod tests {
         image.save(&scan).unwrap();
 
         let width_with = |mode| {
+            // Tightening onto the picture's own edge is what "only the picture" asks for.
             let settings = DetectSettings {
                 mode,
+                cut_to: CutAround::Picture,
                 ..Default::default()
             };
             analyze_scan(&scan, &settings, &dir.join("c"))
@@ -692,6 +718,14 @@ mod tests {
         let (v3, lite) = (width_with(Detector::V3), width_with(Detector::V7Lite));
         assert!((v3 - 500.0).abs() < 6.0, "v3 {v3}");
         assert!((lite - 468.0).abs() < 6.0, "v7-lite {lite}");
+
+        // The whole card or print is the default, and the screen sends it as written in the settings file.
+        assert_eq!(DetectSettings::default().cut_to, CutAround::Card);
+        assert_eq!(
+            serde_json::from_str::<DetectSettings>(r#"{"cutTo": "picture"}"#).unwrap().cut_to,
+            CutAround::Picture
+        );
+        assert_eq!(serde_json::from_str::<DetectSettings>("{}").unwrap().cut_to, CutAround::Card);
 
         // The screen sends the names as written in the settings file.
         let parsed: DetectSettings = serde_json::from_str(r#"{"mode": "v3"}"#).unwrap();

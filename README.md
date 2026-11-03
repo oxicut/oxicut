@@ -12,7 +12,7 @@ Scan a whole pile of photos at once, and let OxiCut cut them apart. Put several 
 
 ## What it does
 
-- **Finds the pictures for you.** It also copes with crooked prints, white borders and zigzag edges.
+- **Finds the pictures for you.** It also copes with crooked prints, white borders and zigzag edges, and cuts postcards whole, margins and all (or only the picture, if you prefer).
 - **Straightens every picture** and saves it as its own file, at the full quality of your scan.
 - **Lets you check first.** Scans where nothing looks wrong are approved by themselves. The ones that need a look wait for you.
 - **Easy to fix.** Move, resize or turn a frame, add one that was missed, split two pictures that were found as one, or make a crop a little closer or wider. A magnifier follows the corner you are working on.

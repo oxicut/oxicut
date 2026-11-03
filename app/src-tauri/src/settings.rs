@@ -29,6 +29,8 @@ pub struct AppSettings {
     pub min_area_percent: f64,
     pub max_area_percent: f64,
     pub inset_px: i32,
+    /// What a box is cut around: `card` (the whole card or print) or `picture`.
+    pub cut_to: String,
     /// `same`, `jpg`, `png` or `tiff`.
     pub format: String,
     pub jpeg_quality: u8,
@@ -56,6 +58,7 @@ impl Default for AppSettings {
             min_area_percent: 2.0,
             max_area_percent: 80.0,
             inset_px: 0,
+            cut_to: "card".into(),
             format: "same".into(),
             jpeg_quality: 92,
             pattern: "{source}-{n}".into(),
@@ -119,6 +122,8 @@ mod tests {
         let from_old: AppSettings =
             serde_json::from_str(r#"{"insetPx": 4, "somethingNew": true}"#).unwrap();
         assert_eq!(from_old.inset_px, 4);
+        // A file from before the choice existed cuts around the whole card.
+        assert_eq!(from_old.cut_to, "card");
         assert_eq!(from_old.format, "same");
         assert_eq!(from_old.pattern, "{source}-{n}");
         assert!(from_old.auto_approve);

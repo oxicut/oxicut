@@ -381,9 +381,12 @@ function showInFolder(card: Card) {
   border-radius: 10px;
 }
 .picture {
+  /* The height is a number, not a percentage: a percentage max-height on the picture does not resolve
+     against a button, so a tall (portrait) card was drawn at its full height and only its middle showed. */
+  --card-picture: 220px;
   display: grid;
   place-items: center;
-  height: 220px;
+  height: var(--card-picture);
   padding: 0;
   background: var(--stage);
   border: 0;
@@ -393,7 +396,7 @@ function showInFolder(card: Card) {
 }
 .picture img {
   max-width: 100%;
-  max-height: 100%;
+  max-height: var(--card-picture);
   object-fit: contain;
 }
 .gone {
