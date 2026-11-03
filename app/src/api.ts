@@ -4,6 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import type { ExportDetails } from "./details";
 import type { ThemeChoice } from "./theme";
 
 /** A box in source pixels: centre, size, and the angle of the `w` axis in degrees (clockwise on screen). */
@@ -154,8 +155,14 @@ export interface FinalCrop {
   shownAsCopy: boolean;
 }
 
-export const finalCrop = (path: string, region: Box, number: number, name: string | null, options: ExportOptions) =>
-  invoke<FinalCrop>("final_crop", { path, region, number, name, options });
+export const finalCrop = (
+  path: string,
+  region: Box,
+  number: number,
+  name: string | null,
+  details: ExportDetails | null,
+  options: ExportOptions,
+) => invoke<FinalCrop>("final_crop", { path, region, number, name, details, options });
 
 export const getCrops = (path: string, scanWidth: number, boxes: Box[], side: number) =>
   invoke<CropImage[]>("get_crops", { path, scanWidth, boxes, side });
@@ -169,6 +176,8 @@ export interface ExportItem {
   boxes: Box[];
   /** A file name (without extension) for each box; `null` lets the naming pattern decide. */
   names: (string | null)[];
+  /** What the user entered about each box (date, place, caption, people); `null` for none. */
+  details: (ExportDetails | null)[];
   /** A scan whose output folder to use: the backs of a pair go next to their fronts. */
   folderOf: string | null;
 }
@@ -180,6 +189,14 @@ export const exportScans = (
 ) => invoke<ExportSummary>("export_scans", { items, options, onEvent: channel(onEvent) });
 
 // ---- projects: one `.oxicut` file per batch of scans
+
+/** What a project file keeps of a picture's details. */
+export interface SavedDetails {
+  date: string;
+  place: string;
+  caption: string;
+  people: string[];
+}
 
 export interface ScanRecord {
   id: number;
@@ -198,6 +215,10 @@ export interface ScanRecord {
   backsOn?: number | null;
   /** Which picture goes with which on `backsOn`: positions in the two lists of boxes (front, back). */
   pairs?: [number, number][];
+  /** What the user entered about every picture on this scan. */
+  details?: SavedDetails;
+  /** Pictures with details of their own (an empty field means "use the scan's"), by position in `boxes`. */
+  cropDetails?: ({ index: number } & SavedDetails)[];
   error: string | null;
 }
 

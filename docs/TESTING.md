@@ -48,6 +48,18 @@ Things worth checking in particular:
 
 Change `version` in the root `Cargo.toml` (it feeds the app, the installer and the command line), push, then on GitHub open Actions, choose *Release* and *Run workflow*. It runs the tests, builds the installer and publishes a release named `v<version>` with `OxiCut-setup.exe`. Running it again for the same version replaces that release. Install the result on a clean machine and check: it starts, the About window shows the version, and double-clicking a `.oxicut` file opens it.
 
+## Date, place, caption and people
+
+Open the **Details** tab (right panel) with a scan selected and fill in the fields: the line under *Date* says what OxiCut understood ("Saved as about 1980." for "circa 1980"; "No year found, so it is kept as you wrote it." when there is no year). In the **Crops** view each card shows the date and place in small type, and **About this picture…** opens that picture's own details (what you leave empty is taken from the scan, shown greyed out; **Use the scan's details** clears them). **Copy to the other scans** only fills what is still empty. Then export and check:
+
+- in Windows (right click a saved JPEG, Properties, Details) *Date taken*, *Comments* or the description show the date and caption; a program that reads XMP (for example a photo library) shows the caption, the people as tags, and the place;
+- a picture with its own caption carries that one, its neighbours carry the scan's;
+- a PNG and a TIFF keep their details too (for a TIFF the caption is also in the description tag when it is plain ASCII);
+- close the app and open it again: the details are still there, and the cards that have their own are marked;
+- remove a crop and press Undo: its own details come back.
+
+The date taken is a representative date: a month or day you did not give becomes January or the 1st, because EXIF cannot say "only the year". The exact wording is kept next to it.
+
 ## Fronts and backs
 
 Scan the fronts of some postcards, then turn the stack over and scan the backs. Add both scans, open the **Crops** view on the scan of the fronts and choose **Backs are on another scan…**. Check:

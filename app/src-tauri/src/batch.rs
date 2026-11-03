@@ -10,6 +10,7 @@ use std::time::Instant;
 use oxicut_core::RotatedRect;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
+use oxicut_core::details::Details;
 use oxicut_core::export::{Collision, ExportSettings, OutputFormat, ScanExport};
 use oxicut_core::flags::{IdentifiedBox, evaluate_scan};
 use oxicut_core::io::load_image;
@@ -129,6 +130,36 @@ pub fn flags_for(boxes: &[IdBox], width: u32, height: u32) -> Vec<FlagDto> {
         .collect()
 }
 
+/// The details of one picture as the screen sends them: the date as typed with the year, month and
+/// day read out of it.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DetailsDto {
+    pub date_text: String,
+    pub year: Option<u16>,
+    pub month: Option<u8>,
+    pub day: Option<u8>,
+    pub approximate: bool,
+    pub place: String,
+    pub caption: String,
+    pub people: Vec<String>,
+}
+
+impl From<&DetailsDto> for Details {
+    fn from(d: &DetailsDto) -> Details {
+        Details {
+            date_text: d.date_text.clone(),
+            year: d.year,
+            month: d.month,
+            day: d.day,
+            approximate: d.approximate,
+            place: d.place.clone(),
+            caption: d.caption.clone(),
+            people: d.people.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportItem {
@@ -138,6 +169,10 @@ pub struct ExportItem {
     /// naming pattern. Pairs of fronts and backs are named this way.
     #[serde(default)]
     pub names: Vec<Option<String>>,
+    /// What the user entered about each picture (date, place, caption, people), in the same order;
+    /// `None`, or no entry, writes nothing of the kind.
+    #[serde(default)]
+    pub details: Vec<Option<DetailsDto>>,
     /// A scan whose `OxiCut output` folder to use instead of this scan's own: the backs of a pair are
     /// saved next to their fronts.
     #[serde(default)]
@@ -255,8 +290,9 @@ pub fn export_batch(
             let mut files = Vec::new();
             for (index, region) in regions.iter().enumerate() {
                 let name = item.names.get(index).and_then(|n| n.as_deref());
+                let details = item.details.get(index).and_then(|d| d.as_ref()).map(Details::from);
                 if let Some(done) = export
-                    .write_named(&image, region, index + 1, name)
+                    .write_with_details(&image, region, index + 1, name, details.as_ref())
                     .map_err(|e| e.to_string())?
                 {
                     files.push(done.file.path.to_string_lossy().into_owned());
@@ -352,6 +388,7 @@ pub fn final_crop(
     region: &BoxDto,
     number: usize,
     chosen_name: Option<&str>,
+    details: Option<&DetailsDto>,
     options: &ExportOptions,
     scratch_dir: &Path,
 ) -> Result<FinalCrop, String> {
@@ -366,7 +403,7 @@ pub fn final_crop(
     let settings = export_settings(options, format, Collision::Overwrite);
     let rect = RotatedRect::new(region.cx, region.cy, region.w, region.h, region.angle);
     let written = ScanExport::new(source, scratch_dir, &settings)
-        .and_then(|export| export.write_named(&image, &rect, number, chosen_name))
+        .and_then(|export| export.write_with_details(&image, &rect, number, chosen_name, details.map(Details::from).as_ref()))
         .map_err(|e| e.to_string())?
         .ok_or("This box lies outside the scan, so there is nothing to cut.")?;
 
@@ -444,7 +481,7 @@ mod tests {
         write_scan(&scan);
         let scratch_dir = dir.join("scratch");
 
-        let cut = final_crop(&scan, &PRINT, 3, None, &options("png"), &scratch_dir).unwrap();
+        let cut = final_crop(&scan, &PRINT, 3, None, None, &options("png"), &scratch_dir).unwrap();
         // Named like the export names it (print number 3), full size, a PNG that is shown as it is.
         assert_eq!(Path::new(&cut.path), scratch_dir.join("holiday-3.png"));
         assert_eq!((cut.width, cut.height), (360, 460));
@@ -462,7 +499,7 @@ mod tests {
         assert_eq!(std::fs::read(&written[0].path).unwrap(), std::fs::read(&cut.path).unwrap());
 
         // Cutting again replaces the file instead of piling up " (2)" copies.
-        final_crop(&scan, &PRINT, 3, None, &options("png"), &scratch_dir).unwrap();
+        final_crop(&scan, &PRINT, 3, None, None, &options("png"), &scratch_dir).unwrap();
         assert_eq!(std::fs::read_dir(&scratch_dir).unwrap().count(), 1);
     }
 
@@ -471,7 +508,7 @@ mod tests {
         let dir = scratch("final-tiff");
         let scan = dir.join("holiday.png");
         write_scan(&scan);
-        let cut = final_crop(&scan, &PRINT, 1, None, &options("tiff"), &dir.join("scratch")).unwrap();
+        let cut = final_crop(&scan, &PRINT, 1, None, None, &options("tiff"), &dir.join("scratch")).unwrap();
         assert_eq!(cut.format, "tif");
         assert!(cut.shown_as_copy && cut.data_url.starts_with("data:image/jpeg;base64,"));
         let copy = STANDARD.decode(cut.data_url.trim_start_matches("data:image/jpeg;base64,")).unwrap();
@@ -485,7 +522,7 @@ mod tests {
         let scan = dir.join("holiday.png");
         write_scan(&scan);
         let outside = BoxDto { cx: 9000.0, cy: 9000.0, w: 100.0, h: 100.0, angle: 0.0 };
-        let error = final_crop(&scan, &outside, 1, None, &options("png"), &dir.join("scratch")).unwrap_err();
+        let error = final_crop(&scan, &outside, 1, None, None, &options("png"), &dir.join("scratch")).unwrap_err();
         assert!(error.contains("outside the scan"), "{error}");
     }
 
@@ -706,12 +743,14 @@ mod tests {
                 path: front.to_string_lossy().into_owned(),
                 boxes: one.clone(),
                 names: vec![Some("cards-1-front".into())],
+                details: vec![Some(DetailsDto { place: "Fronts".into(), ..Default::default() })],
                 folder_of: None,
             },
             ExportItem {
                 path: back.to_string_lossy().into_owned(),
                 boxes: one,
                 names: vec![Some("cards-1-back".into())],
+                details: vec![Some(DetailsDto { caption: "Written on the back".into(), ..Default::default() })],
                 folder_of: Some(front.to_string_lossy().into_owned()),
             },
         ];
@@ -728,6 +767,13 @@ mod tests {
         let together = fronts.join("OxiCut output");
         assert!(together.join("cards-1-front.png").is_file());
         assert!(together.join("cards-1-back.png").is_file());
+        // Each picture carries the details it was sent with (the XMP text is stored as it is in a PNG).
+        let contains = |name: &str, text: &str| {
+            let bytes = std::fs::read(together.join(name)).unwrap();
+            bytes.windows(text.len()).any(|w| w == text.as_bytes())
+        };
+        assert!(contains("cards-1-front.png", "Fronts") && !contains("cards-1-front.png", "Written on the back"));
+        assert!(contains("cards-1-back.png", "Written on the back") && !contains("cards-1-back.png", "Fronts"));
         assert!(!backs.join("OxiCut output").exists());
     }
 

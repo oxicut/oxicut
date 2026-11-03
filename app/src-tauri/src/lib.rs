@@ -185,12 +185,13 @@ async fn final_crop(
     region: engine::BoxDto,
     number: usize,
     name: Option<String>,
+    details: Option<batch::DetailsDto>,
     options: ExportOptions,
     state: State<'_, AppState>,
 ) -> Result<batch::FinalCrop, String> {
     let scratch = state.cache_dir.join("final-crops");
     tauri::async_runtime::spawn_blocking(move || {
-        batch::final_crop(&PathBuf::from(path), &region, number, name.as_deref(), &options, &scratch)
+        batch::final_crop(&PathBuf::from(path), &region, number, name.as_deref(), details.as_ref(), &options, &scratch)
     })
     .await
     .map_err(|e| e.to_string())?

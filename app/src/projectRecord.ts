@@ -1,6 +1,7 @@
 // Turning the scan list into what a `.oxicut` file holds and back. No Vue here, so it is easy to test.
 
 import type { Box, ProjectFile, ScanRecord } from "./api";
+import { isEmptyDetails, limitDetails, noDetails, type Details } from "./details.ts";
 import type { Pair } from "./pairing.ts";
 
 /** The part of a scan that is kept in a project (previews, thumbnails, history and flags are rebuilt). */
@@ -20,6 +21,10 @@ export interface SavedScan {
   backsOn: number | null;
   /** Which picture on this scan goes with which on `backsOn` (box ids). */
   pairs: Pair[];
+  /** What the user entered about every picture on this scan. */
+  details: Details;
+  /** Pictures with details of their own, by box id (an empty field means "use the scan's"). */
+  cropDetails: Record<number, Details>;
   error: string | null;
 }
 
@@ -54,6 +59,26 @@ export function pairsFromPositions(positions: [number, number][], frontBoxes: { 
   return pairs;
 }
 
+/** The pictures' own details as positions in the box list (box ids are made up fresh on open). */
+export function cropDetailRecords(scan: SavedScan): ({ index: number } & Details)[] {
+  const records: ({ index: number } & Details)[] = [];
+  scan.boxes.forEach((box, index) => {
+    const own = box.id === undefined ? undefined : scan.cropDetails[box.id];
+    if (own && !isEmptyDetails(own)) records.push({ index, ...limitDetails(own) });
+  });
+  return records;
+}
+
+/** The pictures' own details back by box id, once the boxes have their ids. */
+export function cropDetailsFromRecords(records: ({ index: number } & Details)[], boxes: { id: number }[]): Record<number, Details> {
+  const out: Record<number, Details> = {};
+  for (const { index, ...own } of records) {
+    const box = boxes[index];
+    if (box && !isEmptyDetails(own)) out[box.id] = limitDetails(own);
+  }
+  return out;
+}
+
 /** `all` is every scan of the project: a pair is saved as positions, which needs the other scan's boxes. */
 export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord {
   return {
@@ -69,6 +94,8 @@ export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord
     exportedFiles: [...scan.exportedFiles],
     backsOn: scan.backsOn,
     pairs: pairPositions(scan, all),
+    details: limitDetails(scan.details),
+    cropDetails: cropDetailRecords(scan),
     error: scan.error,
   };
 }
@@ -76,7 +103,7 @@ export function toRecord(scan: SavedScan, all: SavedScan[] = [scan]): ScanRecord
 /** A record as the app wants it, whatever an older or newer file left out. */
 export function fromRecord(
   record: Partial<ScanRecord> & { id: number; path: string },
-): SavedScan & { status: RestoredStatus; pairPositions: [number, number][] } {
+): SavedScan & { status: RestoredStatus; pairPositions: [number, number][]; cropDetailRecords: ({ index: number } & Details)[] } {
   const name = record.name || record.path.split(/[\\/]/).pop() || record.path;
   const boxes = Array.isArray(record.boxes) ? record.boxes : [];
   // A scan never measured (size 0) was not analysed yet, whatever status it claims.
@@ -97,6 +124,14 @@ export function fromRecord(
     // Positions in the box lists; the store turns them into box ids once every scan has its boxes.
     pairPositions: Array.isArray(record.pairs)
       ? record.pairs.filter((p): p is [number, number] => Array.isArray(p) && Number.isInteger(p[0]) && Number.isInteger(p[1]))
+      : [],
+    details: limitDetails(record.details ?? noDetails()),
+    cropDetails: {},
+    // By position in the box list; the store turns them into box ids once every box has its id.
+    cropDetailRecords: Array.isArray(record.cropDetails)
+      ? record.cropDetails
+          .filter((c) => c && Number.isInteger(c.index) && c.index >= 0)
+          .map((c) => ({ index: c.index, ...limitDetails(c) }))
       : [],
     error: record.error ?? null,
   };

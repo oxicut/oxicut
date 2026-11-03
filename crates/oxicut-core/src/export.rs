@@ -8,6 +8,7 @@ use image::{DynamicImage, ImageFormat};
 use img_parts::{ImageEXIF, ImageICC};
 
 use crate::crop::crop_region;
+use crate::details::Details;
 use crate::geometry::RotatedRect;
 use crate::metadata::Metadata;
 
@@ -110,10 +111,22 @@ fn with_jpeg_metadata(bytes: Vec<u8>, metadata: &Metadata) -> Vec<u8> {
     };
     jpeg.set_icc_profile(metadata.icc.clone().map(Into::into));
     jpeg.set_exif(metadata.crop_exif().map(Into::into));
+    if let Some(body) = metadata.xmp().and_then(|packet| crate::xmp::jpeg_segment(&packet)) {
+        // After the leading APP segments (JFIF, EXIF), before the tables and the picture.
+        let at = jpeg
+            .segments()
+            .iter()
+            .take_while(|s| (img_parts::jpeg::markers::APP0..=img_parts::jpeg::markers::APP15).contains(&s.marker()))
+            .count();
+        jpeg.segments_mut().insert(
+            at,
+            img_parts::jpeg::JpegSegment::new_with_contents(img_parts::jpeg::markers::APP1, body.into()),
+        );
+    }
     jpeg.encoder().bytes().to_vec()
 }
 
-/// Add resolution (`pHYs`), colour profile, EXIF and a `Software` text chunk to an encoded PNG.
+/// Add resolution (`pHYs`), colour profile, EXIF, the details (XMP) and a `Software` text chunk to an encoded PNG.
 fn with_png_metadata(bytes: Vec<u8>, metadata: &Metadata) -> Vec<u8> {
     use img_parts::png::{Png, PngChunk};
     let Ok(mut png) = Png::from_bytes(bytes.clone().into()) else {
@@ -122,6 +135,10 @@ fn with_png_metadata(bytes: Vec<u8>, metadata: &Metadata) -> Vec<u8> {
     png.set_icc_profile(metadata.icc.clone().map(Into::into));
     png.set_exif(metadata.crop_exif().map(Into::into));
     // Ancillary chunks go right after the header, before the pixel data.
+    if let Some(packet) = metadata.xmp() {
+        png.chunks_mut()
+            .insert(1, PngChunk::new(*b"iTXt", crate::xmp::png_itxt(&packet).into()));
+    }
     if let Some(software) = metadata.software_tag() {
         let mut text = b"Software\0".to_vec();
         text.extend_from_slice(software.as_bytes());
@@ -205,6 +222,15 @@ where
     }
     if let Some(icc) = &metadata.icc {
         frame.encoder().write_tag(Tag::IccProfile, &icc[..])?;
+    }
+    if let Some(details) = metadata.details.as_ref().map(crate::details::Details::normalized) {
+        // TIFF text tags are plain ASCII; anything else is only in the XMP.
+        if details.caption.is_ascii() && !details.caption.is_empty() {
+            frame.encoder().write_tag(Tag::ImageDescription, details.caption.as_str())?;
+        }
+    }
+    if let Some(packet) = metadata.xmp() {
+        frame.encoder().write_tag(Tag::Unknown(crate::xmp::TIFF_TAG), &packet[..])?;
     }
     frame.write_data(pixels)
 }
@@ -392,6 +418,19 @@ impl<'a> ScanExport<'a> {
         number: usize,
         name: Option<&str>,
     ) -> Result<Option<WrittenCrop>, ExportError> {
+        self.write_with_details(image, region, number, name, None)
+    }
+
+    /// Like `write_named`, with what the user entered about this picture (date, place, caption,
+    /// people), written into the file next to the scan's own metadata.
+    pub fn write_with_details(
+        &self,
+        image: &DynamicImage,
+        region: &RotatedRect,
+        number: usize,
+        name: Option<&str>,
+        details: Option<&Details>,
+    ) -> Result<Option<WrittenCrop>, ExportError> {
         let Some(crop) = crop_region(image, region) else {
             return Ok(None);
         };
@@ -410,7 +449,14 @@ impl<'a> ScanExport<'a> {
         {
             return Err(ExportError::WouldOverwriteSource(self.source_path.to_path_buf()));
         }
-        save_image(&crop, &path, self.format, self.settings.jpeg_quality, &self.metadata)?;
+        match details.filter(|d| !d.is_empty()) {
+            Some(details) => {
+                let mut metadata = self.metadata.clone();
+                metadata.details = Some(details.clone());
+                save_image(&crop, &path, self.format, self.settings.jpeg_quality, &metadata)?;
+            }
+            None => save_image(&crop, &path, self.format, self.settings.jpeg_quality, &self.metadata)?,
+        }
         let file = ExportedFile {
             path,
             width: crop.width(),
@@ -714,6 +760,7 @@ mod tests {
             icc: Some((0..300u32).map(|i| (i % 251) as u8).collect()),
             exif: Some(exif.into_inner()),
             tag_software: true,
+            details: None,
         }
     }
 
@@ -751,6 +798,163 @@ mod tests {
             // Still a picture the usual decoder reads.
             assert_eq!(image::open(&path).unwrap().dimensions(), (40, 30));
         }
+    }
+
+    fn details() -> Details {
+        Details {
+            date_text: "14 June 1975".into(),
+            year: Some(1975),
+            month: Some(6),
+            day: Some(14),
+            place: "Balaton, Hungary".into(),
+            caption: "Beach day, Anna & Péter".into(),
+            people: vec!["Anna".into(), "Péter".into()],
+            ..Default::default()
+        }
+    }
+
+    /// The XMP text of a written JPEG, PNG or TIFF, if it has any.
+    fn xmp_in(path: &Path) -> Option<String> {
+        let bytes = std::fs::read(path).unwrap();
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("jpg") => {
+                let jpeg = img_parts::jpeg::Jpeg::from_bytes(bytes.into()).unwrap();
+                jpeg.segments()
+                    .iter()
+                    .find(|s| s.marker() == img_parts::jpeg::markers::APP1 && s.contents().starts_with(crate::xmp::JPEG_HEADER))
+                    .map(|s| String::from_utf8(s.contents()[crate::xmp::JPEG_HEADER.len()..].to_vec()).unwrap())
+            }
+            Some("png") => {
+                let png = img_parts::png::Png::from_bytes(bytes.into()).unwrap();
+                let chunk = png.chunk_by_type(*b"iTXt")?;
+                let data = chunk.contents();
+                let rest = data.strip_prefix(&b"XML:com.adobe.xmp\0\0\0\0\0"[..])?;
+                Some(String::from_utf8(rest.to_vec()).unwrap())
+            }
+            _ => {
+                let mut decoder = tiff::decoder::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).unwrap())).unwrap();
+                let raw = decoder.get_tag_u8_vec(tiff::tags::Tag::Unknown(crate::xmp::TIFF_TAG)).ok()?;
+                Some(String::from_utf8(raw).unwrap())
+            }
+        }
+    }
+
+    #[test]
+    fn details_replace_the_scans_date_and_description_and_are_written_as_xmp() {
+        let dir = scratch("details-jpg-png");
+        let mut meta = rich_metadata();
+        meta.details = Some(details());
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(40, 30, Rgb([90, 120, 150])));
+        for (format, name) in [(OutputFormat::Jpg, "c.jpg"), (OutputFormat::Png, "c.png")] {
+            let path = dir.join(name);
+            save_image(&crop, &path, format, 90, &meta).unwrap();
+
+            let back = Metadata::read(&path);
+            let exif = back.exif.unwrap_or_else(|| panic!("{name}: no EXIF"));
+            // The picture's own date, not the scanner's (2024); the rest of the scan's EXIF stays.
+            assert_eq!(exif_text(&exif, exif::Tag::DateTimeOriginal).as_deref(), Some("1975:06:14 00:00:00"), "{name}");
+            assert_eq!(exif_text(&exif, exif::Tag::DateTimeDigitized).as_deref(), Some("1975:06:14 00:00:00"), "{name}");
+            assert_eq!(exif_text(&exif, exif::Tag::ImageDescription).as_deref(), Some("Beach day, Anna & Péter"), "{name}");
+            assert_eq!(exif_text(&exif, exif::Tag::Make).as_deref(), Some("EPSON"), "{name}");
+            assert_eq!(
+                exif_text(&exif, exif::Tag::Software).as_deref(),
+                Some(crate::metadata::software().as_str()),
+                "{name}"
+            );
+            assert!(back.dpi.is_some() && back.icc == meta.icc, "{name}: resolution and profile stay");
+
+            let xmp = xmp_in(&path).unwrap_or_else(|| panic!("{name}: no XMP"));
+            assert!(xmp.contains("Beach day, Anna &amp; Péter"), "{name}");
+            assert!(xmp.contains("photoshop:DateCreated=\"1975-06-14\""), "{name}");
+            assert!(xmp.contains("Iptc4xmpCore:Location=\"Balaton, Hungary\""), "{name}");
+            assert!(xmp.contains("<rdf:li>Péter</rdf:li>"), "{name}");
+            assert!(xmp.contains("xmp:CreatorTool=\"OxiCut"), "{name}");
+            // Still a picture the usual decoder reads.
+            assert_eq!(image::open(&path).unwrap().dimensions(), (40, 30), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_caption_alone_keeps_the_scans_date_and_no_details_means_no_xmp() {
+        let dir = scratch("details-partial");
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(20, 20, Rgb([1, 2, 3])));
+
+        let mut caption_only = rich_metadata();
+        caption_only.details = Some(Details {
+            caption: "Just words".into(),
+            ..Default::default()
+        });
+        let path = dir.join("a.jpg");
+        save_image(&crop, &path, OutputFormat::Jpg, 90, &caption_only).unwrap();
+        let exif = Metadata::read(&path).exif.unwrap();
+        assert_eq!(exif_text(&exif, exif::Tag::DateTimeOriginal).as_deref(), Some("2024:05:01 10:00:00"));
+        assert_eq!(exif_text(&exif, exif::Tag::ImageDescription).as_deref(), Some("Just words"));
+        assert!(!xmp_in(&path).unwrap().contains("DateCreated"));
+
+        let mut blank = rich_metadata();
+        blank.details = Some(Details {
+            place: "   ".into(),
+            ..Default::default()
+        });
+        for (name, meta) in [("none.jpg", rich_metadata()), ("blank.jpg", blank)] {
+            let path = dir.join(name);
+            save_image(&crop, &path, OutputFormat::Jpg, 90, &meta).unwrap();
+            assert!(xmp_in(&path).is_none(), "{name}");
+            let exif = Metadata::read(&path).exif.unwrap();
+            assert_eq!(exif_text(&exif, exif::Tag::DateTimeOriginal).as_deref(), Some("2024:05:01 10:00:00"));
+            assert_eq!(exif_text(&exif, exif::Tag::ImageDescription), None);
+        }
+    }
+
+    #[test]
+    fn tiff_carries_the_details_in_xmp_and_an_ascii_caption_in_its_own_tag() {
+        use tiff::decoder::{Decoder, ifd::Value};
+        let dir = scratch("details-tiff");
+        let crop = DynamicImage::ImageRgb8(RgbImage::from_pixel(4, 4, Rgb([1, 2, 3])));
+
+        let mut meta = stamp_only();
+        meta.details = Some(Details {
+            caption: "Plain words".into(),
+            ..details()
+        });
+        let path = dir.join("a.tif");
+        save_image(&crop, &path, OutputFormat::Tiff, 90, &meta).unwrap();
+        let mut decoder = Decoder::new(std::io::BufReader::new(std::fs::File::open(&path).unwrap())).unwrap();
+        let Value::Ascii(text) = decoder.get_tag(tiff::tags::Tag::ImageDescription).unwrap() else {
+            panic!("ImageDescription is not text")
+        };
+        assert_eq!(text, "Plain words");
+        let xmp = xmp_in(&path).unwrap();
+        assert!(xmp.contains("Plain words") && xmp.contains("PersonInImage"));
+        assert_eq!(image::open(&path).unwrap().dimensions(), (4, 4));
+
+        // Not ASCII: only the XMP carries it (the TIFF text tags cannot).
+        meta.details = Some(details());
+        let path = dir.join("b.tif");
+        save_image(&crop, &path, OutputFormat::Tiff, 90, &meta).unwrap();
+        let mut decoder = Decoder::new(std::io::BufReader::new(std::fs::File::open(&path).unwrap())).unwrap();
+        assert!(decoder.get_tag(tiff::tags::Tag::ImageDescription).is_err());
+        assert!(xmp_in(&path).unwrap().contains("Beach day, Anna &amp; Péter"));
+    }
+
+    #[test]
+    fn a_picture_exported_with_details_gets_them_and_its_neighbour_does_not() {
+        let dir = scratch("details-export");
+        let source = dir.join("s.png");
+        let settings = ExportSettings {
+            format: OutputFormat::Jpg,
+            ..Default::default()
+        };
+        let out = dir.join("out");
+        let export = ScanExport::new(&source, &out, &settings).unwrap();
+        let regions = regions();
+        let first = export
+            .write_with_details(&scan(), &regions[0], 1, None, Some(&details()))
+            .unwrap()
+            .unwrap();
+        let second = export.write_with_details(&scan(), &regions[1], 2, None, None).unwrap().unwrap();
+        assert!(xmp_in(&first.file.path).unwrap().contains("Balaton"));
+        assert!(xmp_in(&second.file.path).is_none());
     }
 
     #[test]
