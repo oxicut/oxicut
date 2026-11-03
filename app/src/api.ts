@@ -4,7 +4,8 @@ import type { Release } from "./updates";
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { resolveResource } from "@tauri-apps/api/path";
 import type { ExportDetails } from "./details";
 import type { ThemeChoice } from "./theme";
 
@@ -306,6 +307,8 @@ export const revealInExplorer = (path: string) => revealItemInDir(path);
 
 /** Open a web address in the user's browser. */
 export const openLink = (url: string) => openUrl(url);
+/** The list of licences that is installed with the program, opened in the program Windows has for text files. */
+export const openLicences = async () => openPath(await resolveResource("resources/third-party-notices.txt"));
 
 /** Readable size, e.g. "27 MB". */
 export function formatBytes(bytes: number): string {

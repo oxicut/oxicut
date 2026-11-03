@@ -1,0 +1,15 @@
+name: An idea
+description: Something OxiCut could do, or do better.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What would you like OxiCut to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help?
+      description: What is hard or missing today?

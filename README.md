@@ -116,4 +116,6 @@ cargo tauri build --no-bundle             # target\release\oxicut-app.exe
 
 The detection pipeline, its benchmark methodology and the choice of MobileSAM are ScanSplitter's, by Madnex. MobileSAM weights are from [Acly/MobileSAM](https://huggingface.co/Acly/MobileSAM). The orientation model is [deep-image-orientation-detection](https://github.com/duartebarbosadev/deep-image-orientation-detection) by Duarte Barbosa (MIT licence), chosen by ScanSplitter; OxiCut asks it for all four quarter turns of a picture instead of one answer (see [`docs/orientation.md`](docs/orientation.md)).
 
+MobileSAM's own licence is Apache-2.0 and Acly's ONNX export is MIT; ONNX Runtime, which runs the models, is MIT. OxiCut is built from open-source Rust and JavaScript packages whose licences (and the models') are collected in the file that is installed with the program and opened from the **About** window (**Licences of the parts OxiCut is built from**); `node tools/make-notices.mjs` rebuilds it.
+
 OxiCut is licensed under the GNU General Public License v3.0, as a derivative work of ScanSplitter. See [LICENSE](LICENSE).

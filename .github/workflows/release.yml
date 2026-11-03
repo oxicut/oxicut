@@ -77,6 +77,10 @@ jobs:
         working-directory: app
         run: npm test
 
+      # The licence notices that go into the installer must match the packages this build contains.
+      - name: Check the licence notices
+        run: node tools/make-notices.mjs --check
+
       - name: Build the installer
         working-directory: app
         run: npx tauri build --bundles nsis

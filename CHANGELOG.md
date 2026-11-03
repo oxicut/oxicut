@@ -40,7 +40,7 @@ The first full version. OxiCut cuts a scan of several photos or postcards apart 
 **The program**
 - **Looks the way you like:** follow Windows, light or dark. The scan list and the side panel fold away to make room, and still show the key facts (Ctrl+B and Ctrl+Shift+B).
 - **A quiet check for a newer version.** OxiCut looks once when it starts. If there is a newer version, a small arrow appears next to the version in the bottom bar and in the About window, and clicking it shows what is new. It only asks GitHub for the newest version number and the list of changes, and nothing about you or your scans is sent. You can switch it off in Settings.
-- **An About window** with two buttons: the OxiCut website, and the project page for developers.
+- **An About window** with two buttons: the OxiCut website, and the project page for developers. A link at the bottom opens the licences of the parts OxiCut is built from.
 - **Works without internet.** The only things that use it are the downloads you start and the check for a newer version.
 
 ### Fixed
