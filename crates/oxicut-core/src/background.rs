@@ -7,6 +7,13 @@ use crate::kmeans::kmeans;
 const CLUSTERS: usize = 5;
 const SAMPLE_TARGET: f64 = 30_000.0;
 
+/// How far (in Lab colour) a cluster's colour may be from the main paper colour and still count as
+/// background, as ScanSplitter has it. It lets a cream scanner lid and its shadows count as one.
+pub const PLATEN_CHROMA_TOLERANCE: f32 = 24.0;
+/// The tolerance when the lid is known to be light and neutral: cream or tan postcards that merely
+/// touch the edge of the scan must not become "background" (see `detect::detect_cards`).
+pub const LIGHT_LID_CHROMA_TOLERANCE: f32 = 12.0;
+
 fn dist(a: &[f32; 3], b: &[f32; 3]) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
 }
@@ -16,6 +23,11 @@ fn dist(a: &[f32; 3], b: &[f32; 3]) -> f32 {
 /// Several clusters are kept because scanner falloff and shadows make one sheet
 /// of paper span a wide lightness range. Returned in cluster-index order.
 pub fn background_colors(lab: &LabImage) -> Vec<[f32; 3]> {
+    background_colors_with(lab, PLATEN_CHROMA_TOLERANCE)
+}
+
+/// [`background_colors`] with the colour difference a cluster may have from the main colour.
+pub fn background_colors_with(lab: &LabImage, chroma_tolerance: f32) -> Vec<[f32; 3]> {
     let (width, height) = (lab.width, lab.height);
     let stride = ((width * height) as f64 / SAMPLE_TARGET).sqrt().max(1.0) as usize;
 
@@ -73,7 +85,7 @@ pub fn background_colors(lab: &LabImage) -> Vec<[f32; 3]> {
     for i in 0..CLUSTERS {
         let chroma_delta =
             ((centers[i][1] - primary[1]).powi(2) + (centers[i][2] - primary[2]).powi(2)).sqrt();
-        let similar = centers[i][0] >= primary[0] - 55.0 && chroma_delta <= 24.0;
+        let similar = centers[i][0] >= primary[0] - 55.0 && chroma_delta <= chroma_tolerance;
         let border_share = border_counts[i] as f32 / border_total.max(1) as f32;
         selected[i] = similar && border_share >= 0.015;
     }
@@ -152,6 +164,22 @@ mod tests {
             centers.iter().any(|c| c[0] < 40.0),
             "dark corners not selected: {centers:?}"
         );
+    }
+
+    #[test]
+    fn tan_paper_touching_the_edge_is_background_only_with_the_loose_tolerance() {
+        // A white lid with tan cards that run off the left edge: the tan shows up in the border band.
+        let mut rgb = RgbImage::from_pixel(600, 400, Rgb([243, 247, 248]));
+        for y in 40..360 {
+            for x in 0..260 {
+                rgb.put_pixel(x, y, Rgb([234, 214, 178]));
+            }
+        }
+        let lab = rgb_to_lab(&rgb);
+        let loose = background_colors_with(&lab, PLATEN_CHROMA_TOLERANCE);
+        let strict = background_colors_with(&lab, LIGHT_LID_CHROMA_TOLERANCE);
+        assert!(loose.len() > strict.len(), "loose {loose:?}, strict {strict:?}");
+        assert!(strict.iter().all(|c| c[2] < 140.0), "tan stayed in the background: {strict:?}");
     }
 
     #[test]

@@ -43,8 +43,22 @@ pub fn split_on_gutter(
     foreground: &Foreground,
     minimum_area: f64,
 ) -> Vec<RotatedRect> {
+    split_on_gutter_with(rect, foreground, minimum_area, MIN_SPLIT_ASPECT)
+}
+
+/// Rectangles at least this elongated are tried for a gutter when the cards are known to be separate
+/// objects on a light lid: two landscape cards stacked make a blob that is hardly elongated at all.
+pub const CARD_SPLIT_ASPECT: f64 = 1.2;
+
+/// [`split_on_gutter`] with the elongation a rectangle needs before a gutter is looked for.
+pub fn split_on_gutter_with(
+    rect: &RotatedRect,
+    foreground: &Foreground,
+    minimum_area: f64,
+    min_aspect: f64,
+) -> Vec<RotatedRect> {
     let (width, height) = (rect.w, rect.h);
-    if width.min(height) <= 0.0 || width.max(height) / width.min(height) < MIN_SPLIT_ASPECT {
+    if width.min(height) <= 0.0 || width.max(height) / width.min(height) < min_aspect {
         return vec![*rect];
     }
 

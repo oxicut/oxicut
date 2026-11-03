@@ -47,6 +47,11 @@ fn v3_proposals(
 
 pub fn detect_v7_lite(source: &RgbImage, options: &DetectOptions) -> Detection {
     let mut detection = detect_v3(source, options);
+    // Boxes that follow the paper are already on the card's edge: pulling them onto the picture's own
+    // edge would cut the margins off again.
+    if detection.stages.card_pass {
+        return detection;
+    }
     let proposals = v3_proposals(&detection, source, options);
 
     let (gray, scale) = working_gray(source, WORK_MAX);

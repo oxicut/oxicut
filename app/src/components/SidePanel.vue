@@ -142,6 +142,16 @@ const openModelsFolder =() =>
         <span>Trim from each side (px)</span>
         <input v-model.number="state.settings.insetPx" type="number" min="0" max="500" />
       </label>
+      <label class="field">
+        <span>Cut around</span>
+        <select v-model="state.settings.cutTo">
+          <option value="card">The whole card or print</option>
+          <option value="picture">Only the picture</option>
+        </select>
+      </label>
+      <p class="muted note">
+        For postcards and prints with a margin, choose the whole card. Choose only the picture to leave a white border out.
+      </p>
       <label class="check">
         <input v-model="state.settings.autoApprove" type="checkbox" />
         Approve scans with nothing to flag automatically

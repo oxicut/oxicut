@@ -7,20 +7,34 @@
 
 use image::{GrayImage, RgbImage};
 
-use crate::background::background_colors;
+use crate::background::{LIGHT_LID_CHROMA_TOLERANCE, background_colors, background_colors_with};
 use crate::candidates::candidate_rects;
 use crate::color::{rgb_to_gray, rgb_to_lab};
-use crate::foreground::foreground_capped;
+use crate::foreground::{foreground_capped, paper_foreground};
 use crate::geometry::RotatedRect;
 use crate::mask::region_mask;
 use crate::merge::{deduplicate, merge_fragments};
 use crate::refine::refine_rect_to_edges;
 use crate::resize::{DETECTION_MAX_DIMENSION, for_detection};
 use crate::snap::snap_angle_to_long_edges;
-use crate::split::split_on_gutter;
+use crate::split::{CARD_SPLIT_ASPECT, split_on_gutter, split_on_gutter_with};
+
+/// What a box is cut around.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CutTo {
+    /// The whole card or print, paper margins included. On a light lid with separate cards the
+    /// detector first looks for the paper itself (see [`detect_cards`]); when the scan is not like
+    /// that it falls back to the classic detector.
+    Card,
+    /// The picture: ScanSplitter's behaviour, which is what its benchmark measures.
+    #[default]
+    Picture,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DetectOptions {
+    /// Whether a box follows the whole card or print, margins and all, or only the picture.
+    pub cut_to: CutTo,
     /// Smallest accepted item, as a share of the scan's area.
     pub min_area_ratio: f64,
     /// Largest accepted item, as a share of the scan's area.
@@ -36,6 +50,7 @@ pub struct DetectOptions {
 impl Default for DetectOptions {
     fn default() -> Self {
         Self {
+            cut_to: CutTo::Picture,
             min_area_ratio: 0.02,
             max_area_ratio: 0.80,
             padding: 0,
@@ -76,6 +91,8 @@ pub struct Stages {
     pub refined: Vec<RotatedRect>,
     /// After v7's inner-edge tightening (empty for plain v3).
     pub tightened: Vec<RotatedRect>,
+    /// This result comes from the card pass (see [`detect_cards`]), whose boxes follow the paper.
+    pub card_pass: bool,
 }
 
 pub struct Detection {
@@ -143,6 +160,141 @@ pub fn detect_v3_capped(
     options: &DetectOptions,
     color_cap: Option<f32>,
 ) -> Detection {
+    if options.cut_to == CutTo::Card
+        && color_cap.is_none()
+        && let Some(detection) = detect_cards(source, options)
+    {
+        return detection;
+    }
+    run_v3(source, options, color_cap, false)
+}
+
+/// Find whole cards on a light, neutral scanner lid: the lid's colour is kept apart from cream and tan
+/// paper that happens to touch the edge of the scan, pale paper counts as foreground, and stacked cards
+/// are separated at their gutter. `None` when the result does not look like that (an album page, a dark
+/// platen, one big blob), so the caller can use the classic detector instead.
+pub fn detect_cards(source: &RgbImage, options: &DetectOptions) -> Option<Detection> {
+    let detection = run_v3(source, options, None, true);
+    looks_like_cards(&detection).then_some(detection)
+}
+
+/// How far (detection pixels, each side) the paper mask runs past a card's real edge.
+const CARD_EDGE_SHRINK: f64 = 2.0;
+/// How much of a card's rectangle must be foreground for the card pass to be believed.
+const CARD_MIN_MEAN_FILL: f64 = 0.75;
+const CARD_MIN_FILL: f64 = 0.35;
+/// More of the scan than this being "not lid" means the lid is not what it seems (eight postcards
+/// side by side cover about 70%).
+const CARD_MAX_FOREGROUND_SHARE: f64 = 0.85;
+
+/// Does a card-pass result look like separate cards on a light lid?
+fn looks_like_cards(detection: &Detection) -> bool {
+    let stages = &detection.stages;
+    // A light, neutral lid (OpenCV 8-bit Lab: lightness 0 to 255, a and b around 128).
+    let light_lid = stages
+        .backgrounds_lab
+        .iter()
+        .any(|c| c[0] >= 215.0 && (c[1] - 128.0).abs() <= 10.0 && (c[2] - 128.0).abs() <= 12.0);
+    if !light_lid || detection.regions.is_empty() || stages.split.is_empty() {
+        return false;
+    }
+    let mask = &stages.foreground_mask;
+    let lit = mask.pixels().filter(|p| p.0[0] > 0).count() as f64;
+    if lit / (mask.width() as f64 * mask.height() as f64) > CARD_MAX_FOREGROUND_SHARE {
+        return false;
+    }
+    let fills: Vec<f64> = stages.split.iter().map(|r| mask_fill(mask, r)).collect();
+    let mean = fills.iter().sum::<f64>() / fills.len() as f64;
+    mean >= CARD_MIN_MEAN_FILL && fills.iter().all(|&f| f >= CARD_MIN_FILL)
+}
+
+/// A rectangle shrunk to the foreground inside it: along each side, up to the first and last row or column
+/// that holds at least a quarter as much foreground as the fullest one.
+fn fit_to_mask(rect: &RotatedRect, foreground: &crate::foreground::Foreground) -> RotatedRect {
+    let corners = rect.corners();
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (x, y) in corners {
+        x0 = x0.min(x);
+        x1 = x1.max(x);
+        y0 = y0.min(y);
+        y1 = y1.max(y);
+    }
+    let (width, height) = (foreground.width, foreground.height);
+    let (x0, x1) = (x0.floor().max(0.0) as usize, (x1.ceil().min(width as f64 - 1.0)).max(0.0) as usize);
+    let (y0, y1) = (y0.floor().max(0.0) as usize, (y1.ceil().min(height as f64 - 1.0)).max(0.0) as usize);
+    let theta = rect.angle.to_radians();
+    let (c, s) = (theta.cos(), theta.sin());
+    let (columns, rows) = (rect.w.ceil() as usize + 1, rect.h.ceil() as usize + 1);
+    let (mut across, mut down) = (vec![0u32; columns], vec![0u32; rows]);
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            if !foreground.mask[y * width + x] {
+                continue;
+            }
+            let (dx, dy) = (x as f64 + 0.5 - rect.cx, y as f64 + 0.5 - rect.cy);
+            let (u, v) = (dx * c + dy * s + rect.w / 2.0, -dx * s + dy * c + rect.h / 2.0);
+            if u >= 0.0 && v >= 0.0 && (u as usize) < columns && (v as usize) < rows {
+                across[u as usize] += 1;
+                down[v as usize] += 1;
+            }
+        }
+    }
+    let extent = |bins: &[u32]| -> Option<(usize, usize)> {
+        let most = *bins.iter().max()?;
+        if most == 0 {
+            return None;
+        }
+        let least = most.div_ceil(4);
+        let first = bins.iter().position(|&n| n >= least)?;
+        let last = bins.iter().rposition(|&n| n >= least)?;
+        Some((first, last + 1))
+    };
+    let (Some((u0, u1)), Some((v0, v1))) = (extent(&across), extent(&down)) else {
+        return *rect;
+    };
+    let (new_w, new_h) = ((u1 - u0) as f64, (v1 - v0) as f64);
+    if new_w < 1.0 || new_h < 1.0 {
+        return *rect;
+    }
+    // The new centre, back in scan coordinates.
+    let (du, dv) = ((u0 + u1) as f64 / 2.0 - rect.w / 2.0, (v0 + v1) as f64 / 2.0 - rect.h / 2.0);
+    RotatedRect::new(rect.cx + du * c - dv * s, rect.cy + du * s + dv * c, new_w, new_h, rect.angle)
+}
+
+/// The share of `rect` (in the mask's pixels) that is foreground.
+fn mask_fill(mask: &GrayImage, rect: &RotatedRect) -> f64 {
+    let corners = rect.corners();
+    let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for (x, y) in corners {
+        x0 = x0.min(x);
+        x1 = x1.max(x);
+        y0 = y0.min(y);
+        y1 = y1.max(y);
+    }
+    let (width, height) = mask.dimensions();
+    let (x0, x1) = (x0.floor().max(0.0) as u32, (x1.ceil().min(width as f64 - 1.0)).max(0.0) as u32);
+    let (y0, y1) = (y0.floor().max(0.0) as u32, (y1.ceil().min(height as f64 - 1.0)).max(0.0) as u32);
+    let theta = rect.angle.to_radians();
+    let (c, s) = (theta.cos(), theta.sin());
+    let (mut inside, mut lit) = (0u64, 0u64);
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let (dx, dy) = (x as f64 + 0.5 - rect.cx, y as f64 + 0.5 - rect.cy);
+            let (u, v) = (dx * c + dy * s, -dx * s + dy * c);
+            if u.abs() <= rect.w / 2.0 && v.abs() <= rect.h / 2.0 {
+                inside += 1;
+                if mask.get_pixel(x, y).0[0] > 0 {
+                    lit += 1;
+                }
+            }
+        }
+    }
+    if inside == 0 { 0.0 } else { lit as f64 / inside as f64 }
+}
+
+/// The v3 pipeline. `cards` switches on the card pass: the stricter lid colour, pale paper as foreground
+/// and gutters looked for in blobs that are hardly elongated.
+fn run_v3(source: &RgbImage, options: &DetectOptions, color_cap: Option<f32>, cards: bool) -> Detection {
     let (original_width, original_height) = source.dimensions();
     let working = for_detection(source, options.detection_max_dimension);
     let scale = working.scale;
@@ -151,8 +303,16 @@ pub fn detect_v3_capped(
     let total_area = width as f64 * height as f64;
 
     let lab = rgb_to_lab(small);
-    let backgrounds = background_colors(&lab);
-    let fg = foreground_capped(&lab, &backgrounds, color_cap);
+    let backgrounds = if cards {
+        background_colors_with(&lab, LIGHT_LID_CHROMA_TOLERANCE)
+    } else {
+        background_colors(&lab)
+    };
+    let fg = if cards {
+        paper_foreground(&lab, &backgrounds)
+    } else {
+        foreground_capped(&lab, &backgrounds, color_cap)
+    };
     let mask = region_mask(&fg);
 
     let minimum_area = options.min_area_ratio * total_area;
@@ -162,8 +322,22 @@ pub fn detect_v3_capped(
     let deduplicated = deduplicate(&merged);
     let split: Vec<RotatedRect> = deduplicated
         .iter()
-        .flat_map(|rect| split_on_gutter(rect, &fg, minimum_area))
+        .flat_map(|rect| {
+            if cards {
+                split_on_gutter_with(rect, &fg, minimum_area, CARD_SPLIT_ASPECT)
+            } else {
+                split_on_gutter(rect, &fg, minimum_area)
+            }
+        })
         .collect();
+
+    // A blob split at its gutter keeps the width of the widest card in it: the card pass fits each
+    // piece to the paper that is really inside it.
+    let split = if cards {
+        split.iter().map(|rect| fit_to_mask(rect, &fg)).collect()
+    } else {
+        split
+    };
 
     let gray = rgb_to_gray(small);
     let (gw, gh) = (gray.width() as usize, gray.height() as usize);
@@ -171,10 +345,20 @@ pub fn detect_v3_capped(
         .iter()
         .map(|rect| snap_angle_to_long_edges(gray.as_raw(), gw, gh, rect))
         .collect();
-    let refined: Vec<RotatedRect> = snapped
-        .iter()
-        .map(|rect| refine_rect_to_edges(gray.as_raw(), gw, gh, rect, 0.12))
-        .collect();
+    // The card pass trusts the paper mask: its edge is the card's, where the strongest edge nearby may be
+    // the printed picture inside it. The mask runs a little past the paper (smoothing, density), which is
+    // taken back.
+    let refined: Vec<RotatedRect> = if cards {
+        snapped
+            .iter()
+            .map(|r| RotatedRect::new(r.cx, r.cy, (r.w - 2.0 * CARD_EDGE_SHRINK).max(1.0), (r.h - 2.0 * CARD_EDGE_SHRINK).max(1.0), r.angle))
+            .collect()
+    } else {
+        snapped
+            .iter()
+            .map(|rect| refine_rect_to_edges(gray.as_raw(), gw, gh, rect, 0.12))
+            .collect()
+    };
 
     let full_size: Vec<RotatedRect> = refined.iter().map(|r| r.scaled(1.0 / scale)).collect();
     let regions = regions_from_rects(&full_size, original_width, original_height, options);
@@ -199,6 +383,7 @@ pub fn detect_v3_capped(
             snapped,
             refined,
             tightened: Vec::new(),
+            card_pass: cards,
         },
     }
 }
@@ -359,5 +544,116 @@ mod tests {
             (region.w - 1500.0).abs() < 8.0 && (region.h - 1200.0).abs() < 8.0,
             "{region:?}"
         );
+    }
+
+    /// A white lid with six postcards, two columns of three, cream or tan paper, each with a coloured picture
+    /// that leaves a margin of bare paper on its right. The left column runs close to the edge of the scan.
+    fn postcards_on_a_white_lid() -> (RgbImage, Vec<RotatedRect>) {
+        let (width, height) = (1240u32, 1240u32);
+        let mut image = RgbImage::from_fn(width, height, |x, y| {
+            let noise = ((x * 3 + y * 5) % 4) as u8;
+            Rgb([243 - noise, 247 - noise, 248])
+        });
+        let papers = [[240u8, 232, 210], [232, 212, 176], [238, 226, 198]];
+        let mut cards = Vec::new();
+        for (column, x0) in [(0u32, 12u32), (1, 660)] {
+            for row in 0..3u32 {
+                let y0 = 40 + row * 400;
+                let paper = papers[((column + row) % 3) as usize];
+                for y in y0..y0 + 300 {
+                    for x in x0..x0 + 520 {
+                        let noise = ((x * 7 + y * 13) % 5) as u8;
+                        image.put_pixel(x, y, Rgb([paper[0] - noise, paper[1] - noise, paper[2]]));
+                    }
+                }
+                // The picture: strong colour, the card's right 140 px stay bare paper.
+                for y in y0 + 20..y0 + 280 {
+                    for x in x0 + 20..x0 + 380 {
+                        let noise = ((x * 11 + y * 3) % 9) as u8;
+                        image.put_pixel(x, y, Rgb([50 + noise, 90, 150 - noise]));
+                    }
+                }
+                cards.push(RotatedRect::new(x0 as f64 + 260.0, y0 as f64 + 150.0, 520.0, 300.0, 0.0));
+            }
+        }
+        (image, cards)
+    }
+
+    fn best_overlap(card: &RotatedRect, detection: &Detection) -> f64 {
+        detection
+            .regions
+            .iter()
+            .map(|r| crate::geometry::iou(card, &r.rect))
+            .fold(0.0, f64::max)
+    }
+
+    #[test]
+    fn cards_with_paper_margins_are_cut_whole_when_asked() {
+        let (image, cards) = postcards_on_a_white_lid();
+        let options = DetectOptions {
+            inset: 0,
+            cut_to: CutTo::Card,
+            ..Default::default()
+        };
+        let detection = detect_v3(&image, &options);
+        assert_eq!(detection.regions.len(), 6, "{:?}", detection.regions);
+        for card in &cards {
+            let overlap = best_overlap(card, &detection);
+            assert!(overlap > 0.9, "card at {:?} overlaps only {overlap:.2}; found {:?}", (card.cx, card.cy), detection.regions.iter().map(|r| (r.rect.cx.round(), r.rect.cy.round(), r.rect.w.round(), r.rect.h.round(), r.rect.angle.round())).collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
+    fn cutting_to_the_picture_leaves_the_margins_out() {
+        let (image, cards) = postcards_on_a_white_lid();
+        let detection = detect_v3(
+            &image,
+            &DetectOptions {
+                inset: 0,
+                cut_to: CutTo::Picture,
+                ..Default::default()
+            },
+        );
+        // ScanSplitter's behaviour: the coloured picture, not the card (140 of 520 px are bare paper).
+        assert!(detection.regions.len() >= 3);
+        for card in &cards {
+            assert!(best_overlap(card, &detection) < 0.85);
+        }
+    }
+
+    #[test]
+    fn a_page_that_is_not_a_light_lid_gets_the_classic_detector_whatever_the_setting() {
+        // An album page: cream all over, three photographs on it.
+        let mut image = RgbImage::from_pixel(1000, 700, Rgb([226, 208, 172]));
+        for &(x0, y0, w, h) in &[(80u32, 90u32, 360u32, 240u32), (520, 110, 360, 240), (300, 400, 360, 240)] {
+            for y in y0..y0 + h {
+                for x in x0..x0 + w {
+                    let noise = ((x * 7 + y * 13) % 11) as u8;
+                    image.put_pixel(x, y, Rgb([60 + noise, 85, 120]));
+                }
+            }
+        }
+        assert!(detect_cards(&image, &DetectOptions::default()).is_none());
+        let card = detect_v3(&image, &DetectOptions { cut_to: CutTo::Card, ..Default::default() });
+        let picture = detect_v3(&image, &DetectOptions { cut_to: CutTo::Picture, ..Default::default() });
+        let boxes = |d: &Detection| d.regions.iter().map(|r| r.rect).collect::<Vec<_>>();
+        assert_eq!(boxes(&card), boxes(&picture));
+        assert_eq!(card.regions.len(), 3);
+    }
+
+    #[test]
+    fn the_fill_of_a_rectangle_counts_only_its_own_pixels() {
+        let mut mask = GrayImage::new(100, 60);
+        for y in 10..50 {
+            for x in 20..60 {
+                mask.put_pixel(x, y, image::Luma([255]));
+            }
+        }
+        // Exactly on the lit block, then twice as wide, then nowhere near it.
+        assert!((mask_fill(&mask, &RotatedRect::new(40.0, 30.0, 40.0, 40.0, 0.0)) - 1.0).abs() < 1e-9);
+        assert!((mask_fill(&mask, &RotatedRect::new(60.0, 30.0, 80.0, 40.0, 0.0)) - 0.5).abs() < 0.03);
+        assert_eq!(mask_fill(&mask, &RotatedRect::new(90.0, 30.0, 10.0, 10.0, 0.0)), 0.0);
+        // Turned a quarter, a square block is the same.
+        assert!((mask_fill(&mask, &RotatedRect::new(40.0, 30.0, 40.0, 40.0, 90.0)) - 1.0).abs() < 0.02);
     }
 }
