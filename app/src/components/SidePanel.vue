@@ -95,7 +95,7 @@ const openModelsFolder =() =>
     <button
       class="tool"
       :aria-pressed="tab === 'downloads'"
-      :title="modelsMissing ? 'Downloads: Careful is chosen but its files are missing' : 'Downloads'"
+      :title="modelsMissing ? 'Downloads: the Careful (v7) detection method is chosen but its files are missing' : 'Downloads'"
       @click="showTab('downloads')"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9" /></svg>
@@ -124,8 +124,8 @@ const openModelsFolder =() =>
       </label>
       <p class="callout">{{ methodFor(state.settings.mode)?.about }}</p>
       <p v-if="state.settings.mode === 'v7' && state.models.length && !v7Ready()" class="error-text">
-        The files for Careful are not downloaded, so scans cannot be found with it.
-        <button class="link" @click="tab = 'downloads'">Open the Downloads tab</button> to get them, or pick Standard.
+        The files for the Careful (v7) detection method are not downloaded, so scans cannot be detected with it.
+        <button class="link" @click="tab = 'downloads'">Open the Downloads tab</button> to get them, or choose the Standard (v7-lite) detection method.
       </p>
 
       <div class="grid2">
@@ -273,8 +273,8 @@ const openModelsFolder =() =>
 
     <div v-else class="body">
       <p class="muted lead">
-        Careful and turning pictures the right way up each need a model, a file that OxiCut downloads once. They are
-        optional: Standard works without them. Each is downloaded once, checked to be complete, and kept outside OxiCut's installer.
+        The Careful (v7) detection method and turning pictures the right way up each need a model, a file that OxiCut downloads once. They are
+        optional: the Standard (v7-lite) detection method works without them. Each is downloaded once, checked to be complete, and kept outside OxiCut's installer.
       </p>
       <ul class="models">
         <li v-for="m in state.models" :key="m.id" class="model">
@@ -301,7 +301,7 @@ const openModelsFolder =() =>
         :disabled="downloading()"
         @click="downloadModels(state.models.filter((m) => m.state !== 'ready' && m.id !== 'orientation').map((m) => m.id))"
       >
-        Download the files for Careful
+        Download the Careful (v7) files
       </button>
       <div v-if="state.modelsFolder" class="row">
         <code class="grow path" :title="state.modelsFolder">{{ state.modelsFolder }}</code>

@@ -22,7 +22,7 @@ export const METHODS: DetectionMethod[] = [
     name: "Careful",
     hint: "most accurate",
     about:
-      "Careful also uses extra files, downloaded once, to find the prints. It weighs that against colour, edges and texture, " +
+      "The Careful (v7) detection method also uses models, files downloaded once, to find the prints. It weighs that against colour, edges and texture, " +
       "and moves each side onto the photograph's own edge. It is the most accurate and takes a few seconds per scan.",
   },
   {
@@ -30,15 +30,15 @@ export const METHODS: DetectionMethod[] = [
     name: "Standard",
     hint: "also trims white borders",
     about:
-      "Standard takes Basic's boxes and moves each side onto the photograph's own edge when it finds a clear border. " +
-      "It can still miss or merge prints; Careful (it needs a one-time download) is better at counting them.",
+      "The Standard (v7-lite) detection method takes the boxes of the Basic (v3) method and moves each side onto the photograph's own edge when it finds a clear border. " +
+      "It can still miss or merge prints; the Careful (v7) detection method (it needs a one-time download) is better at counting them.",
   },
   {
     mode: "v3",
     name: "Basic",
     hint: "colour and edges only",
     about:
-      "Basic works on colour and edges only. On prints with white borders the box can run out onto the border or its shadow.",
+      "The Basic (v3) detection method works on colour and edges only. On prints with white borders the box can run out onto the border or its shadow.",
   },
 ];
 

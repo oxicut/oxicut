@@ -36,7 +36,7 @@ Close the app before rebuilding: Windows will not replace a running exe.
 
 Things worth checking in particular:
 
-- **Try Careful.** Download its files in the Downloads tab, choose "Careful (v7) · most accurate" under *Detection method* in the Detection tab, and use *Re-detect all*. It should find prints v7-lite missed (on the test scans: the top-middle print of the tape scan and the second photo of the 16-bit TIFF) and takes a few seconds per scan. Please note any scan where v7 is worse than v7-lite.
+- **Try the Careful (v7) detection method.** Download its files in the Downloads tab, choose "Careful (v7) · most accurate" under *Detection method* in the Detection tab, and use *Re-detect all*. It should find prints v7-lite missed (on the test scans: the top-middle print of the tape scan and the second photo of the 16-bit TIFF) and takes a few seconds per scan. Please note any scan where v7 is worse than v7-lite.
 - A white-bordered print on your white lid: does the box land on the photo or on the paper? v7-lite and v7 should sit on the photo where v3 ran onto the border.
 - A 16-bit TIFF from the Epson: export as *Same as the scan* and open the result. It should still be 16-bit and open in Windows Photos and IrfanView.
 - DPI and EXIF: scan something at 600 dpi, export it, and look at the crop in Windows (right click, Properties, Details). The resolution should read 600 dpi, and with *Write OxiCut into the Software field* ticked the "Program name" should read `OxiCut 0.0.1`. With *Keep DPI, colour profile and EXIF* unticked the crop should lose the dpi, the profile and the EXIF dates, and keep only the Program name. The version is also shown at the bottom right of the window.

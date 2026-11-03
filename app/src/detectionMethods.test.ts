@@ -18,7 +18,7 @@ test("something unknown shows as it is rather than as nothing", () => {
 test("the choices are listed most accurate first, and the notes use the plain names", () => {
   assert.deepEqual(METHODS.map((f) => f.mode), ["v7", "v7-lite", "v3"]);
   for (const f of METHODS) {
-    assert.ok(f.about.startsWith(f.name), f.about);
-    for (const jargon of ["MobileSAM", "ONNX", "checksum", "v7", "v3"]) assert.ok(!f.about.includes(jargon), `${f.name}: ${jargon}`);
+    assert.ok(f.about.startsWith(`The ${f.name} (${f.mode}) detection method`), f.about);
+    for (const jargon of ["MobileSAM", "ONNX", "checksum"]) assert.ok(!f.about.includes(jargon), `${f.name}: ${jargon}`);
   }
 });
