@@ -1,0 +1,35 @@
+name: Something does not work
+description: OxiCut did something wrong, or stopped working.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Say it in your own words. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do before it happened?
+      description: The steps, as best you remember them.
+      placeholder: |
+        1. I added a scan of four postcards
+        2. I pressed Re-detect
+        3. ...
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+  - type: input
+    id: version
+    attributes:
+      label: OxiCut version
+      description: Click the version in the bottom bar to open the About window.
+      placeholder: "0.1.0"
+  - type: input
+    id: scan
+    attributes:
+      label: What kind of scan was it?
+      description: For example "four postcards on a white lid, 600 dpi JPEG". Please do not attach private photos.

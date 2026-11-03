@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: The OxiCut website
+    url: https://oxicut.github.io
+    about: How OxiCut works, and where to download it.

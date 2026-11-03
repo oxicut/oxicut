@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { openLink } from "../api";
+import { openLicences, openLink } from "../api";
 import { openWhatsNew, say, state } from "../store";
 import UpdateIcon from "./UpdateIcon.vue";
 
@@ -29,6 +29,10 @@ function openPage() {
 function showWhatsNew() {
   emit("close");
   openWhatsNew();
+}
+
+function showLicences() {
+  openLicences().catch(() => say("The list of licences could not be opened. It is installed together with OxiCut."));
 }
 
 function openScanSplitter() {
@@ -77,6 +81,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
       <div class="muted credit">
         <p>Free software under the GPL-3.0.</p>
         <p>Based on <button class="link" @click="openScanSplitter">ScanSplitter</button> by Madnex.</p>
+        <p><button class="link" @click="showLicences">Licences of the parts OxiCut is built from</button></p>
       </div>
 
       <div class="actions">
