@@ -39,11 +39,15 @@ export interface ScanAnalysis {
 
 export type DetectorMode = "v3" | "v7-lite" | "v7";
 
+/** What a box is cut around: the whole card or print, or only the picture. */
+export type CutAround = "card" | "picture";
+
 export interface DetectSettings {
   mode: DetectorMode;
   minAreaPercent: number;
   maxAreaPercent: number;
   insetPx: number;
+  cutTo: CutAround;
 }
 
 /** A project used lately, with what the Projects list shows (kept up to date as it is saved). */

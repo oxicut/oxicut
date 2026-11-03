@@ -124,3 +124,26 @@ Deviations and findings:
 - **`fillPoly` for the ghost statistics** is replaced by an inclusive point-in-polygon test on the integer vertices; the statistics differ from Python's by about 1 on the worst candidate.
 - **Concurrency.** `ort` sessions need `&mut self` to run and the environment is per process, so every worker thread owns its sessions (`sam::with_thread_sam`).
 - **Remaining misses** are the same as ScanSplitter's: a whole album page stays one box, and pale prints on white can still be missed.
+
+## Cream and tan cards on a white lid: the card pass (a deliberate deviation)
+
+Found on a real scan: eight cream and tan postcards on a white lid (`reference/postcards`, private). v3, v7-lite and v7 all box the printed picture of most cards and leave the paper margin out; the average overlap with the boxes the owner fixed by hand was 0.61 (v3, v7-lite) and 0.59 (v7, one card missing). **ScanSplitter's Python v3 does exactly the same** on that scan: the same two "background" colours and the same boxes (checked with `tools/dump_v3_reference.py`-style code on the file), so this is not a porting mistake.
+
+Why (three causes, each visible in `oxicut detect --debug`):
+
+1. **The cards' paper is called background.** `_v3_background_colors` clusters the scan into five colours and keeps every cluster that is not too different from the main (lid) colour (lightness within 55, colour difference at most 24) and is at least 1.5% of the outer band of the scan. Cards that touch the edge put cream and tan paper into that band, so it counts as lid (here: a second "background" colour of about RGB (232, 212, 176)).
+2. **Pale paper is under the foreground threshold.** The foreground is distance from the background colours above `max(18, Otsu)`. Strong artwork pushes Otsu to 67 here; the paper's distance is 7 to 42, so only the artwork is foreground.
+3. **Stacked cards are one blob.** `_v3_split_on_gutter` only looks for a gutter in blobs at least 1.8 times as long as wide. Two landscape cards one above the other make a blob of about 1.3, so they are never separated.
+
+The card pass (`detect::detect_cards`, used by `detect_v3` when `DetectOptions::cut_to` is `Card`) changes each of them, for the card pass only:
+
+1. the lid colour tolerance is 12 instead of 24 (`background::LIGHT_LID_CHROMA_TOLERANCE`);
+2. `foreground::paper_foreground` adds the pixels that, smoothed over 9 by 9, are more than 8 away from the lid with lightness weighted by 0.15: cream paper is more yellow than the lid, a shadow is only darker;
+3. gutters are looked for in blobs from 1.2 times as long as wide (`split::CARD_SPLIT_ASPECT`), and each piece is then fitted to the foreground inside it (`fit_to_mask`), because a split piece keeps the width of the widest card in the blob;
+4. the strongest-edge refinement is skipped (it pulls a side onto the printed picture inside the card) and boxes are taken in by 2 detection pixels.
+
+The result is only used when it looks like cards on a light lid: a light, neutral lid colour, at most 85% of the scan "not lid", and rectangles that are mostly foreground (mean fill 0.75, none below 0.35). Anything else, such as an album page, a dark platen or a scan that is cream all over, gets the classic detector. `oxicut bench` defaults to `--cut-to picture` (ScanSplitter's measure) and gives the same numbers as before in either mode on its fixtures (checked for v3 and v7-lite): the gate rejects every one of them. v7-lite returns the card pass as it is (tightening onto the picture's own edge would take the margins off again); full v7 arbitrates between this and its other proposals as usual.
+
+Measured on the private scan (mean best overlap with the hand-fixed cards, all 8 found): v3 0.61 to 0.96, v7-lite 0.61 to 0.96, v7 0.59 to 0.92. Every card is at 0.88 or better with v3; the one still behind is the card whose bottom third is a plain white strip (white on a white lid cannot be told apart by colour). v7 still loses some of the margin of two cards to its tightening. The scan is `reference/postcards/postcards-8-cream-on-white-lid.jpg` with the owner's boxes next to it; `crates/oxicut-core/tests/postcards.rs` checks it when present, and `tools/compare-project.mjs` prints the per-card table for any scan and project file.
+
+Known gap: the card pass assumes cards are separate objects. Cards touching each other, or a card with a white margin as pale as the lid, can still merge or be missed.

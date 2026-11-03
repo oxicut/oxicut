@@ -97,9 +97,106 @@ pub fn foreground_capped(lab: &LabImage, backgrounds: &[[f32; 3]], cap: Option<f
     }
 }
 
+/// How much of a difference in lightness counts when looking for pale paper: shadows and scanner
+/// falloff change the lightness of the lid, a cream or tan card changes its yellowness.
+const PAPER_LIGHTNESS_WEIGHT: f32 = 0.15;
+/// Distance (lightness weighted down) from the lid above which a smoothed pixel is paper.
+const PAPER_THRESHOLD: f32 = 8.0;
+/// Radius of the smoothing before the paper test, in detection pixels.
+const PAPER_BLUR_RADIUS: usize = 4;
+
+/// Mean over a square window (clamped at the edges), per channel.
+fn box_blur(lab: &LabImage, radius: usize) -> LabImage {
+    let (w, h) = (lab.width, lab.height);
+    let pass = |src: &[[f32; 3]], horizontal: bool| -> Vec<[f32; 3]> {
+        let mut out = vec![[0f32; 3]; src.len()];
+        let (outer, inner) = if horizontal { (h, w) } else { (w, h) };
+        for o in 0..outer {
+            let at = |i: usize| if horizontal { o * w + i } else { i * w + o };
+            let mut sum = [0f64; 3];
+            let (mut low, mut high) = (0usize, 0usize);
+            for i in 0..inner {
+                let want_high = (i + radius + 1).min(inner);
+                while high < want_high {
+                    for c in 0..3 {
+                        sum[c] += src[at(high)][c] as f64;
+                    }
+                    high += 1;
+                }
+                let want_low = i.saturating_sub(radius);
+                while low < want_low {
+                    for c in 0..3 {
+                        sum[c] -= src[at(low)][c] as f64;
+                    }
+                    low += 1;
+                }
+                let count = (high - low) as f64;
+                for c in 0..3 {
+                    out[at(i)][c] = (sum[c] / count) as f32;
+                }
+            }
+        }
+        out
+    };
+    let horizontal = pass(&lab.data, true);
+    LabImage {
+        width: w,
+        height: h,
+        data: pass(&horizontal, false),
+    }
+}
+
+/// [`foreground`] plus pale paper: pixels that, once smoothed, are more yellow (or otherwise coloured)
+/// than the lid even though their distance is below the Otsu threshold. A postcard with a cream margin
+/// and strongly coloured art puts that threshold far above the paper's own difference from the lid.
+/// Lightness counts little here, so the soft shadows round a card are not mistaken for paper.
+pub fn paper_foreground(lab: &LabImage, backgrounds: &[[f32; 3]]) -> Foreground {
+    let mut foreground = foreground(lab, backgrounds);
+    let smooth = box_blur(lab, PAPER_BLUR_RADIUS);
+    for (pixel, flag) in smooth.data.iter().zip(foreground.mask.iter_mut()) {
+        if *flag {
+            continue;
+        }
+        let nearest = backgrounds
+            .iter()
+            .map(|b| {
+                let light = (pixel[0] - b[0]) * PAPER_LIGHTNESS_WEIGHT;
+                (light * light + (pixel[1] - b[1]).powi(2) + (pixel[2] - b[2]).powi(2)).sqrt()
+            })
+            .fold(f32::INFINITY, f32::min);
+        *flag = nearest > PAPER_THRESHOLD;
+    }
+    foreground
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pale_yellowish_paper_is_foreground_but_a_lightness_change_alone_is_not() {
+        let lid = [240.0, 127.0, 131.0];
+        let width = 60;
+        let mut data = vec![lid; width * 20];
+        for y in 0..20 {
+            for x in 0..20 {
+                // Cream card: only the yellowness differs (b 131 to 139).
+                data[y * width + x] = [237.0, 127.0, 139.0];
+            }
+            for x in 40..60 {
+                // A shadow: lighter or darker lid, same colour.
+                data[y * width + x] = [228.0, 127.0, 131.0];
+            }
+        }
+        let lab = LabImage { width, height: 20, data };
+        let fg = paper_foreground(&lab, &[lid]);
+        assert!(fg.mask[10 * width + 10], "the cream card is paper");
+        assert!(!fg.mask[10 * width + 50], "a shadow is not");
+        assert!(!fg.mask[10 * width + 30], "the lid is not");
+        // The plain foreground sees neither: both are within the 18 floor.
+        let plain = foreground(&lab, &[lid]);
+        assert!(!plain.mask[10 * width + 10]);
+    }
 
     #[test]
     fn otsu_splits_two_clusters_at_the_first_best_level() {
